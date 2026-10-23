@@ -13,7 +13,17 @@ A free, open-source, offline football club management game. Start in the bottom 
 
 Every push to `main` runs the tests, builds the web version and publishes it to the `gh-pages` branch, which serves that link. Your career is saved in the browser.
 
-**On an Android phone:** open the link in Chrome, then menu → **Add to Home screen** (or **Install app**). It then opens full-screen like an app and works offline.
+## Android app (APK)
+
+**Download: https://github.com/towkirhs/open-football-manager/releases/latest/download/OpenFootballManager.apk**
+
+Open that link on your phone, then open the downloaded file to install. The first time, Android asks you to allow installing apps from your browser or file manager: allow it, install, then switch it back off if you like. Every push to `main` builds a new APK at the same link, and installing it over the old one keeps your career.
+
+To load a real-data world on the phone, copy `world.json` into the phone's **Download** folder, then use **Settings → Load a world file** (the app asks once for access to your files).
+
+Signing: the build makes its own signing key once and keeps it in the GitHub Actions cache, so updates install over each other. GitHub drops caches that go unused for 7 days; if that happens the next APK has a new key and you need to uninstall the old app first (your career is lost). To make the key permanent, add your own keystore as repository secrets `ANDROID_KEYSTORE_BASE64` (the file, base64-encoded), `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEYSTORE_ALIAS`. Never commit a keystore.
+
+You can also play without installing: open the browser link in Chrome and choose **Add to Home screen**.
 
 > First time only: in the repository go to **Settings → Pages**, set **Source** to **Deploy from a branch**, pick the **gh-pages** branch and the **/ (root)** folder, and save. After a minute the link works, and every later push updates it.
 

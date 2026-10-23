@@ -1,7 +1,8 @@
-name: Test and publish web build
+name: Test, publish web build and Android APK
 
 # On every push to main: run the simulation tests, export the game for the web and
-# publish it on the gh-pages branch, which GitHub Pages serves as the play link.
+# publish it on the gh-pages branch (GitHub Pages serves it as the play link), and
+# build a signed Android APK attached to the "android" release.
 
 on:
   push:
@@ -29,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: godot-bin
-          key: godot-${{ env.GODOT_VERSION }}-web
+          key: godot-${{ env.GODOT_VERSION }}-web-android
 
       - name: Download Godot and web templates
         if: steps.cache.outputs.cache-hit != 'true'
@@ -39,7 +40,7 @@ jobs:
           unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
           mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
           wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
-          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/web_nothreads_*" "templates/version.txt"
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/web_nothreads_*" "templates/android_*.apk" "templates/version.txt"
           rm -f *.zip *.tpz
 
       - name: Install templates
@@ -69,3 +70,117 @@ jobs:
           git add -A
           git commit -q -m "Web build of ${GITHUB_SHA::7}"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+  android:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-web-android
+
+      - name: Download Godot and templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p godot-bin && cd godot-bin
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/web_nothreads_*" "templates/android_*.apk" "templates/version.txt"
+          rm -f *.zip *.tpz
+
+      - name: Install templates and point Godot at the Android SDK
+        run: |
+          T=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$T"
+          cp godot-bin/templates/* "$T"/
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "Android SDK: $SDK"; ls "$SDK/build-tools" | tail -3
+          keytool -genkeypair -keystore ~/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          mkdir -p ~/.config/godot
+          for f in editor_settings-4.tres editor_settings-${GODOT_VERSION}.tres; do
+            {
+              echo '[gd_resource type="EditorSettings" format=3]'
+              echo ''
+              echo '[resource]'
+              echo "export/android/android_sdk_path = \"$SDK\""
+              echo "export/android/java_sdk_path = \"$JAVA_HOME\""
+              echo "export/android/debug_keystore = \"$HOME/debug.keystore\""
+              echo 'export/android/debug_keystore_user = "androiddebugkey"'
+              echo 'export/android/debug_keystore_pass = "android"'
+            } > ~/.config/godot/$f
+          done
+
+      # The release key must stay the same between builds, or a new APK cannot be
+      # installed over the old one. If the repository has the secrets
+      # ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD, that key is used.
+      # Otherwise a key is made once and kept in the Actions cache.
+      - name: Restore the signing key
+        id: keycache
+        uses: actions/cache@v4
+        with:
+          path: ~/ofm-keystore
+          key: ofm-android-release-key-v1
+
+      - name: Prepare the signing key
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p ~/ofm-keystore
+          if [ -n "$KEY_B64" ] && [ -n "$KEY_PASS" ]; then
+            echo "$KEY_B64" | base64 -d > ~/ofm-keystore/secret.keystore
+            echo "KS_PATH=$HOME/ofm-keystore/secret.keystore" >> "$GITHUB_ENV"
+            echo "KS_PASS=$KEY_PASS" >> "$GITHUB_ENV"
+            echo "Using the key from repository secrets."
+          else
+            if [ ! -f ~/ofm-keystore/release.keystore ]; then
+              head -c 24 /dev/urandom | base64 | tr -d '/+=' > ~/ofm-keystore/pass
+              keytool -genkeypair -keystore ~/ofm-keystore/release.keystore -alias ofm -keyalg RSA -keysize 2048 \
+                -validity 36500 -storepass "$(cat ~/ofm-keystore/pass)" -keypass "$(cat ~/ofm-keystore/pass)" \
+                -dname "CN=Open Football Manager"
+              echo "Made a new signing key."
+            fi
+            echo "::add-mask::$(cat ~/ofm-keystore/pass)"
+            echo "KS_PATH=$HOME/ofm-keystore/release.keystore" >> "$GITHUB_ENV"
+            echo "KS_PASS=$(cat ~/ofm-keystore/pass)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Export APK
+        run: |
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$KS_PATH"
+          export GODOT_ANDROID_KEYSTORE_RELEASE_USER="${{ secrets.ANDROID_KEYSTORE_ALIAS || 'ofm' }}"
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$KS_PASS"
+          sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"1.0.${{ github.run_number }}\"/" export_presets.cfg
+          mkdir -p build/android
+          ./godot-bin/godot --headless --path . --import || true
+          ./godot-bin/godot --headless --path . --export-release "Android" build/android/OpenFootballManager.apk
+          test -s build/android/OpenFootballManager.apk
+          ls -la build/android
+
+      - name: Publish the APK on the "android" release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete android --cleanup-tag -y || true
+          gh release create android build/android/OpenFootballManager.apk \
+            --target "$GITHUB_SHA" --latest \
+            --title "Android APK (build ${{ github.run_number }})" \
+            --notes "Latest Android build of Open Football Manager, made from commit ${GITHUB_SHA::7}. Download OpenFootballManager.apk on your phone and open it to install."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenFootballManager-apk
+          path: build/android/OpenFootballManager.apk

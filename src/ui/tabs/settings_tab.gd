@@ -103,6 +103,10 @@ func _pick_file() -> void:
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.filters = PackedStringArray(["*.json ; World files"])
 	dlg.title = "Choose a world file"
+	if OS.has_feature("android"):
+		# Reading a file you copied to the phone needs storage access (asked once).
+		OS.request_permissions()
+		dlg.current_dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
 	dlg.size = Vector2i(900, 600)
 	dlg.file_selected.connect(func(path):
 		var f := FileAccess.open(path, FileAccess.READ)
