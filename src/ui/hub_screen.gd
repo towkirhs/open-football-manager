@@ -6,8 +6,11 @@ const W = preload("res://src/ui/widgets.gd")
 const UiTheme = preload("res://src/ui/ui_theme.gd")
 const Tactics = preload("res://src/sim/tactics.gd")
 const Lineup = preload("res://src/sim/lineup.gd")
+const Balance = preload("res://src/sim/balance.gd")
+const PlayerProfile = preload("res://src/ui/player_profile.gd")
+const PitchView = preload("res://src/ui/pitch_view.gd")
 
-const TABS := [["home", "Home"], ["squad", "Squad"], ["league", "League"], ["fixtures", "Fixtures"], ["settings", "Settings"]]
+const TABS := [["home", "Home"], ["squad", "Squad"], ["tactics", "Tactics"], ["league", "League"], ["fixtures", "Fixtures"], ["settings", "Settings"]]
 const POS_ORDER := ["GK", "CB", "FB", "DM", "CM", "AM", "WG", "ST"]
 
 var app = null
@@ -17,6 +20,10 @@ var _tab_buttons: Dictionary = {}
 var _squad_sort: int = 0
 var _squad_desc: bool = true
 var _results_week: int = -1
+var _squad_order: Array = []
+var _tactics_lineup = null
+var _tactics_slot: int = -1
+var _candidates: Array = []
 
 
 func _ready() -> void:
@@ -83,6 +90,7 @@ func _open(tab: String) -> void:
 	W.clear_children(_content)
 	match tab:
 		"squad": _build_squad()
+		"tactics": _build_tactics()
 		"league": _build_league()
 		"fixtures": _build_fixtures()
 		"settings": _build_settings()
@@ -159,7 +167,8 @@ func _next_match_card() -> Control:
 	var hint := W.wrap_label("", 13, "muted")
 	v.add_child(hint)
 	var update := func():
-		t.formation = forms[fo.selected]
+		if forms[fo.selected] != t.formation:
+			season.set_user_formation(forms[fo.selected])
 		t.style = so.selected
 		t.mentality = mo.selected
 		hint.text = _tactic_hint(t.style, usual)
@@ -317,8 +326,7 @@ func _news_card() -> Control:
 
 func _build_squad() -> void:
 	var club = season.user_club()
-	var lineup = Lineup.new()
-	lineup.auto_pick(club.players, season.user_tactics.formation)
+	var lineup = season.user_lineup()
 	var starters := {}
 	for p in lineup.players_on_pitch():
 		starters[p.id] = true
@@ -326,7 +334,8 @@ func _build_squad() -> void:
 	var head := W.hbox(10)
 	head.add_child(W.label("%d players  ·  average %.1f" % [club.players.size(), club.average_overall()], 15))
 	head.add_child(W.spacer())
-	head.add_child(W.label("XI = picked for your %s. Click a column title to sort." % season.user_tactics.formation, 13, "muted"))
+	var who := "the assistant's" if season.user_auto_pick else "your"
+	head.add_child(W.label("XI = %s %s team. Click a player for details, a column title to sort." % [who, season.user_tactics.formation], 13, "muted"))
 	_content.add_child(head)
 
 	var titles := ["", "Pos", "Name", "Age", "Ovr", "Pot", "Fit", "Mor", "Status", "Apps", "Gls", "Ast", "Avg"]
@@ -334,6 +343,7 @@ func _build_squad() -> void:
 	_content.add_child(t)
 
 	var rows: Array = []
+	_squad_order = []
 	for p in club.players:
 		var st: Dictionary = season.stats_for(p.id)
 		var avg: float = st["rating_sum"] / st["apps"] if st["apps"] > 0 else 0.0
@@ -357,6 +367,8 @@ func _build_squad() -> void:
 		var vals := ["XI" if r["xi"] else "", p.position, p.name, p.age, p.overall, p.potential, roundi(p.fitness), roundi(p.morale), status,
 			st["apps"], st["goals"], st["assists"], ("%.1f" % r["avg"]) if st["apps"] > 0 else "-"]
 		var it := W.row(t, vals)
+		it.set_metadata(0, _squad_order.size())
+		_squad_order.append(p)
 		if r["xi"]:
 			it.set_custom_color(0, UiTheme.c("accent"))
 		if p.injury_weeks > 0:
@@ -365,6 +377,7 @@ func _build_squad() -> void:
 			it.set_custom_color(6, UiTheme.c("warn"))
 
 	t.column_title_clicked.connect(_on_squad_title_clicked)
+	t.item_selected.connect(func(): open_profile(_squad_order, int(t.get_selected().get_metadata(0))))
 
 
 func _on_squad_title_clicked(col: int, _btn: int) -> void:
@@ -386,6 +399,221 @@ func _sort_value(r: Dictionary, key: String):
 		"apps", "goals", "assists": return r["st"][key]
 		"avg": return r["avg"]
 	return p.get(key)
+
+
+func open_profile(players: Array, index: int) -> void:
+	var prof = PlayerProfile.new()
+	prof.season = season
+	prof.club = season.user_club()
+	prof.players = players
+	prof.index = index
+	add_child(prof)
+
+
+# ---------------------------------------------------------------- Tactics
+
+func _build_tactics() -> void:
+	if _tactics_lineup == null or _tactics_lineup.formation != season.user_tactics.formation:
+		_tactics_lineup = season.user_lineup()
+	var lineup = _tactics_lineup
+
+	var cols := W.hbox(14)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_content.add_child(cols)
+
+	var pitch = PitchView.new()
+	pitch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pitch.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pitch.custom_minimum_size = Vector2(420, 0)
+	cols.add_child(pitch)
+	pitch.set_lineup(lineup, _tactics_slot)
+	pitch.slot_pressed.connect(_on_slot_pressed)
+
+	var right := W.vbox(10)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 1.3
+	cols.add_child(right)
+
+	var t = season.user_tactics
+	var forms: Array = Tactics.formation_names()
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
+	right.add_child(grid)
+	var fo := W.option(forms, forms.find(t.formation))
+	var so := W.option(Tactics.STYLE_NAMES, t.style)
+	var mo := W.option(Tactics.MENTALITY_NAMES, t.mentality)
+	for o in [fo, so, mo]:
+		o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(o)
+	fo.item_selected.connect(_on_tactics_formation)
+	so.item_selected.connect(_on_tactics_style)
+	mo.item_selected.connect(_on_tactics_mentality)
+
+	var auto_row := W.hbox(10)
+	right.add_child(auto_row)
+	var auto := CheckBox.new()
+	auto.text = "Assistant picks the team every week"
+	auto.button_pressed = season.user_auto_pick
+	auto.toggled.connect(_on_auto_toggled)
+	auto_row.add_child(auto)
+	auto_row.add_child(W.spacer())
+	var best := W.button("Pick best XI")
+	best.custom_minimum_size = Vector2(130, 36)
+	best.pressed.connect(_on_pick_best)
+	auto_row.add_child(best)
+
+	right.add_child(_style_fit_card(lineup))
+
+	var pick_head := W.hbox(8)
+	right.add_child(pick_head)
+	if _tactics_slot < 0:
+		pick_head.add_child(W.heading("Click a player on the pitch to change who plays there"))
+		var bench_names: Array = lineup.bench.map(func(p): return "%s %s" % [p.position, p.name])
+		right.add_child(W.heading("Bench"))
+		right.add_child(W.wrap_label(", ".join(bench_names), 14, "text"))
+		return
+	var role: String = lineup.slots[_tactics_slot]["role"]
+	var current = lineup.slots[_tactics_slot]["player"]
+	pick_head.add_child(W.heading("Choose who plays %s  ·  double-click for details" % role))
+
+	var tree := W.table(["Pos", "Name", role, "Ovr", "Fit", "Now"], [48, 0, 50, 50, 50, 70])
+	right.add_child(tree)
+	_candidates = []
+	var where := {}
+	for i in lineup.slots.size():
+		if lineup.slots[i]["player"] != null:
+			where[lineup.slots[i]["player"].id] = "XI"
+	for p in lineup.bench:
+		where[p.id] = "Bench"
+	var pool: Array = season.user_club().players.duplicate()
+	pool.sort_custom(func(a, b): return Lineup.role_score(a, role) > Lineup.role_score(b, role))
+	for p in pool:
+		var now: String = where.get(p.id, "")
+		if p.injury_weeks > 0:
+			now = "Injured"
+		var it := W.row(tree, [p.position, p.name, Lineup.role_score(p, role), p.overall, roundi(p.fitness), now],
+			"muted" if p.injury_weeks > 0 else "", "highlight" if p == current else "")
+		it.set_metadata(0, _candidates.size())
+		_candidates.append(p)
+		if p.injury_weeks > 0:
+			it.set_selectable(0, false)
+			for c in 6:
+				it.set_selectable(c, false)
+		elif now == "XI":
+			it.set_custom_color(5, UiTheme.c("accent"))
+	tree.item_selected.connect(func(): _assign(_candidates[int(tree.get_selected().get_metadata(0))]))
+	tree.item_activated.connect(func(): open_profile(_candidates, int(tree.get_selected().get_metadata(0))))
+
+
+func _style_fit_card(lineup) -> Control:
+	var card := W.panel()
+	var v := W.vbox(6)
+	card.add_child(v)
+	v.add_child(W.heading("How well this eleven suits each style"))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 8)
+	v.add_child(grid)
+	var outfield: Array = []
+	for slot in lineup.slots:
+		if slot["player"] != null and slot["role"] != "GK":
+			outfield.append(slot["player"])
+	for s in 5:
+		var fit := _style_fit(outfield, s)
+		var box := W.vbox(2)
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var name_l := W.label(Tactics.STYLE_NAMES[s], 12, "accent" if s == season.user_tactics.style else "muted")
+		box.add_child(name_l)
+		var word := "Good" if fit >= 1.04 else ("Poor" if fit <= 0.96 else "OK")
+		var key := "good" if fit >= 1.04 else ("bad" if fit <= 0.96 else "text")
+		box.add_child(W.label("%s  %+d%%" % [word, roundi((fit - 1.0) * 100.0)], 15, key))
+		grid.add_child(box)
+	return card
+
+
+## Same formula as the match engine: how much the players' attributes lean towards a style.
+func _style_fit(players: Array, style: int) -> float:
+	if players.is_empty():
+		return 1.0
+	var cfg: Dictionary = Balance.match_cfg()
+	var w: Dictionary = Tactics.style_cfg(style)["fit"]
+	var diff := 0.0
+	for p in players:
+		diff += p.weighted(w) - p.outfield_average()
+	return clampf(1.0 + diff / players.size() / float(cfg["fit_scale"]), float(cfg["fit_min"]), float(cfg["fit_max"]))
+
+
+func _on_tactics_formation(i: int) -> void:
+	season.set_user_formation(Tactics.formation_names()[i])
+	_tactics_lineup = season.user_lineup()
+	_tactics_slot = -1
+	app.save()
+	_open.call_deferred("tactics")
+
+
+func _on_tactics_style(i: int) -> void:
+	season.user_tactics.style = i
+	app.save()
+	_open.call_deferred("tactics")
+
+
+func _on_tactics_mentality(i: int) -> void:
+	season.user_tactics.mentality = i
+	app.save()
+
+
+func _on_slot_pressed(i: int) -> void:
+	_tactics_slot = -1 if i == _tactics_slot else i
+	_open.call_deferred("tactics")
+
+
+func _assign(p) -> void:
+	var lineup = _tactics_lineup
+	var i: int = _tactics_slot
+	if i < 0 or p.injury_weeks > 0:
+		return
+	var outgoing = lineup.slots[i]["player"]
+	if outgoing == p:
+		return
+	var other: int = lineup.slot_index_of(p.id)
+	if other >= 0:
+		# Swap two players on the pitch.
+		lineup.slots[other]["player"] = outgoing
+	else:
+		var b: int = lineup.bench.find(p)
+		if b >= 0:
+			lineup.bench.remove_at(b)
+			if outgoing != null:
+				lineup.bench.insert(b, outgoing)
+		elif outgoing != null:
+			lineup.bench.push_front(outgoing)
+			if lineup.bench.size() > Lineup.BENCH_SIZE:
+				lineup.bench.resize(Lineup.BENCH_SIZE)
+	lineup.slots[i]["player"] = p
+	season.set_user_selection(lineup)
+	app.save()
+	_open.call_deferred("tactics")
+
+
+func _on_auto_toggled(on: bool) -> void:
+	if on:
+		season.user_auto_pick = true
+	else:
+		season.set_user_selection(season.user_lineup())
+	_tactics_lineup = season.user_lineup()
+	app.save()
+	_open.call_deferred("tactics")
+
+
+func _on_pick_best() -> void:
+	var l = Lineup.new()
+	l.auto_pick(season.user_club().players, season.user_tactics.formation)
+	season.set_user_selection(l)
+	_tactics_lineup = season.user_lineup()
+	_tactics_slot = -1
+	app.save()
+	_open.call_deferred("tactics")
 
 
 # ---------------------------------------------------------------- League

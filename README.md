@@ -20,6 +20,9 @@ Early development. What works now:
 - [x] Career mode: pick a club and play a full 38-week league season
 - [x] Club hub: next match with opponent scouting, your tactics, league table, recent results, inbox
 - [x] Squad, League (table and top scorers), Fixtures and Settings screens
+- [x] Player profiles: picture, ratings, attributes, best roles, season stats, value and wage
+- [x] Tactics screen: pick your own eleven on a pitch, see how well your players suit each style, or let the assistant pick
+- [x] Template portraits (skin tone, build, hairstyle, club shirt) until real photos are added
 - [x] Live matches with a text feed; change formation, style or mentality at half-time; or quick-sim
 - [x] Match engine with formations, playing styles, mentality, familiarity and player fit
 - [x] Cards, injuries, fatigue, substitutions, player ratings and season stats
@@ -28,7 +31,7 @@ Early development. What works now:
 - [x] Fictional 20-club sample league
 - [x] Headless tests and balance report
 
-Next up (see the roadmap below): squad screens with player profiles and lineup picking.
+Next up (see the roadmap below): league pyramids with promotion and relegation, and season rollover with ageing.
 
 ## Running it
 
@@ -92,7 +95,7 @@ This repository only contains fictional data. Real clubs, players and photos are
 2. [x] Match engine
 3. [x] Tactics: formations, styles, matchups, familiarity, fit
 4. [x] One full season: fixtures, weekly Continue, league table, results
-5. [ ] Squad screens: squad list, player profile, lineup and tactics
+5. [x] Squad screens: squad list, player profile, lineup and tactics
 6. [ ] League pyramids with promotion and relegation; season rollover
 7. [ ] Finances, owner goals and the bank (loans and advances)
 8. [ ] Transfers and contracts, with a global player search

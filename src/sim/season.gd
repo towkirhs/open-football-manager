@@ -40,6 +40,10 @@ var style_history: Dictionary = {}
 ## player_id -> {"apps","goals","assists","rating_sum","yellows","reds"}
 var player_stats: Dictionary = {}
 var user_tactics = null
+## When true the assistant picks your team each week; when false your saved team is used.
+var user_auto_pick: bool = true
+## Your saved team: {"formation": String, "slots": Array of player ids, "bench": Array of ids}
+var user_selection: Dictionary = {}
 ## Newest first: {"week": int, "text": String}
 var news: Array = []
 ## Past seasons: {"year", "champion", "user_position", "user_points"}
@@ -220,15 +224,57 @@ func tactics_for(club_id: String, opponent_id: String, rng: RandomNumberGenerato
 	return ai_tactics(club_id, opponent_id, rng)
 
 
+## The human's team for the next match: the saved selection (injured players replaced)
+## or, with the assistant picking, the best available eleven.
+func user_lineup():
+	var l = Lineup.new()
+	var players: Array = user_club().players
+	var f: String = user_tactics.formation
+	if user_auto_pick or user_selection.is_empty():
+		l.auto_pick(players, f)
+	elif str(user_selection.get("formation", "")) != f:
+		l.from_ids(players, user_selection["formation"], user_selection["slots"], user_selection["bench"])
+		l.reshape(f)
+	else:
+		l.from_ids(players, f, user_selection["slots"], user_selection["bench"])
+	return l
+
+
+## Saves a team picked by hand and turns the assistant off.
+func set_user_selection(lineup) -> void:
+	user_selection = {"formation": lineup.formation, "slots": lineup.slot_ids(), "bench": lineup.bench_ids()}
+	user_auto_pick = false
+
+
+## Changes formation, keeping a hand-picked team together in the new shape.
+func set_user_formation(formation: String) -> void:
+	if not user_auto_pick and not user_selection.is_empty():
+		var l = user_lineup()
+		l.reshape(formation)
+		user_tactics.formation = formation
+		set_user_selection(l)
+	else:
+		user_tactics.formation = formation
+
+
+func lineup_for(club_id: String, tactics):
+	if club_id == user_club_id:
+		var l = user_lineup()
+		if l.formation != tactics.formation:
+			l.reshape(tactics.formation)
+		return l
+	var a = Lineup.new()
+	a.auto_pick(club(club_id).players, tactics.formation)
+	return a
+
+
 func make_engine(home_id: String, away_id: String, rng: RandomNumberGenerator):
 	var hc = club(home_id)
 	var ac = club(away_id)
 	var ht = tactics_for(home_id, away_id, rng)
 	var at = tactics_for(away_id, home_id, rng)
-	var hl = Lineup.new()
-	hl.auto_pick(hc.players, ht.formation)
-	var al = Lineup.new()
-	al.auto_pick(ac.players, at.formation)
+	var hl = lineup_for(home_id, ht)
+	var al = lineup_for(away_id, at)
 	var e = MatchEngine.new()
 	e.setup(hc.name, hl, ht, ac.name, al, at, rng)
 	if managers.has(home_id):
@@ -417,6 +463,8 @@ func to_dict() -> Dictionary:
 		"style_history": style_history,
 		"player_stats": player_stats,
 		"user_tactics": user_tactics.to_dict(),
+		"user_auto_pick": user_auto_pick,
+		"user_selection": user_selection,
 		"news": news,
 		"history": history,
 	}
@@ -461,6 +509,8 @@ func load_dict(d: Dictionary) -> void:
 			"rating_sum": float(s["rating_sum"]), "yellows": int(s["yellows"]), "reds": int(s["reds"])}
 	user_tactics = Tactics.new()
 	user_tactics.load_dict(d.get("user_tactics", {}))
+	user_auto_pick = bool(d.get("user_auto_pick", true))
+	user_selection = d.get("user_selection", {})
 	news = []
 	for n in d.get("news", []):
 		news.append({"week": int(n["week"]), "text": str(n["text"])})
@@ -469,6 +519,7 @@ func load_dict(d: Dictionary) -> void:
 
 
 func save(path: String = SAVE_PATH) -> Error:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()

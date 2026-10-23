@@ -15,7 +15,8 @@ const Season = preload("res://src/sim/season.gd")
 
 const SAMPLE := "res://data/sample/sample_league.json"
 const UI_SCRIPTS := ["res://src/ui/app.gd", "res://src/ui/ui_theme.gd", "res://src/ui/new_game_screen.gd",
-	"res://src/ui/hub_screen.gd", "res://src/ui/match_screen.gd", "res://src/ui/widgets.gd"]
+	"res://src/ui/hub_screen.gd", "res://src/ui/match_screen.gd", "res://src/ui/widgets.gd",
+	"res://src/ui/portrait.gd", "res://src/ui/player_profile.gd", "res://src/ui/pitch_view.gd"]
 
 var failures: int = 0
 ## --quick plays fewer games (used by the online build). Pass it after "--".
@@ -29,7 +30,7 @@ func _init() -> void:
 	var compiled := true
 	for path in ["res://src/sim/match_engine.gd", "res://src/sim/tactics.gd", "res://src/sim/lineup.gd",
 			"res://src/sim/ai_manager.gd", "res://src/sim/player_generator.gd", "res://src/sim/season.gd",
-			"res://src/sim/fixtures.gd"] + UI_SCRIPTS:
+			"res://src/sim/fixtures.gd", "res://src/sim/lineup.gd"] + UI_SCRIPTS:
 		var s = load(path)
 		if s == null or not s.can_instantiate():
 			print("  could not compile " + path)
@@ -40,6 +41,7 @@ func _init() -> void:
 		return
 	test_matchup_table()
 	test_season()
+	test_lineups()
 	test_determinism()
 	test_league_averages()
 	test_tactics_matter()
@@ -345,3 +347,80 @@ func test_season() -> void:
 	check(season.history.size() == 1, "season end is recorded in the club history")
 	season.next_season(rng)
 	check(season.week == 0 and season.table[user_id]["pts"] == 0 and season.total_weeks() == 38, "next season starts fresh")
+
+
+func test_lineups() -> void:
+	print("\nPicking your own team")
+	var league := WorldLoader.load_league(SAMPLE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8
+	var season = Season.new()
+	season.new_game(league, league["clubs"][3].id, rng)
+	var club = season.user_club()
+	check(Tactics.LAYOUT.size() == Tactics.FORMATIONS.size(), "every formation has pitch positions")
+	var layout_ok := true
+	for f in Tactics.FORMATIONS:
+		if Tactics.LAYOUT[f].size() != 11:
+			layout_ok = false
+	check(layout_ok, "each layout has 11 positions")
+
+	# Pick a deliberately odd team: the weakest outfielders up front.
+	var auto = season.user_lineup()
+	var picked = Lineup.new()
+	picked.from_ids(club.players, "4-4-2", auto.slot_ids(), auto.bench_ids())
+	var bench_star = auto.bench[0]
+	var striker_slot := 9
+	var benched_id: String = picked.slots[striker_slot]["player"].id
+	var ids: Array = picked.slot_ids()
+	ids[striker_slot] = bench_star.id
+	picked.from_ids(club.players, "4-4-2", ids, [benched_id])
+	season.set_user_selection(picked)
+	var used = season.user_lineup()
+	check(not season.user_auto_pick and used.slots[striker_slot]["player"].id == bench_star.id, "your chosen player starts")
+	check(used.bench[0].id == benched_id, "your chosen bench is kept")
+
+	# An injured pick is replaced, the rest of the team stays.
+	bench_star.injury_weeks = 2
+	used = season.user_lineup()
+	check(used.slots[striker_slot]["player"].id != bench_star.id and used.slot_ids().size() == 11, "an injured pick is replaced")
+	var kept := 0
+	for i in 11:
+		if i != striker_slot and used.slots[i]["player"].id == ids[i]:
+			kept += 1
+	check(kept == 10, "the other ten picks are unchanged")
+	bench_star.injury_weeks = 0
+
+	# Formation change keeps most of the team, but brings in specialists where needed.
+	var before_l = season.user_lineup()
+	var before: Array = before_l.players_on_pitch().map(func(p): return p.id)
+	var before_score := _lineup_strength(before_l)
+	season.set_user_formation("3-5-2")
+	var after_l = season.user_lineup()
+	var after: Array = after_l.players_on_pitch().map(func(p): return p.id)
+	var stayed := after.filter(func(id): return before.has(id)).size()
+	print("  4-4-2 to 3-5-2: %d of 11 kept, average role fit %.1f -> %.1f" % [stayed, before_score, _lineup_strength(after_l)])
+	check(after_l.formation == "3-5-2" and after.size() == 11 and stayed >= 8, "changing formation keeps most of your team")
+	check(_lineup_strength(after_l) >= before_score - 4.0, "nobody is badly out of position after the change")
+	after.sort()
+
+	# The match uses your team.
+	var e = season.prepare_user_match(rng)
+	var side = e.home if season.user_fixture()["user_home"] else e.away
+	var in_match: Array = side.lineup.players_on_pitch().map(func(p): return p.id)
+	in_match.sort()
+	check(in_match == after, "matches use your chosen eleven")
+
+	# Saved and loaded.
+	var path := "user://test_lineup.json"
+	season.save(path)
+	var loaded = Season.new()
+	loaded.load_from(path)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	check(not loaded.user_auto_pick and loaded.user_lineup().slot_ids() == season.user_lineup().slot_ids(), "your team is saved with the career")
+
+
+func _lineup_strength(l) -> float:
+	var total := 0.0
+	for slot in l.slots:
+		total += Lineup.role_score(slot["player"], slot["role"])
+	return total / l.slots.size()
