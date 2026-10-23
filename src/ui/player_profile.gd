@@ -19,7 +19,8 @@ const POSITION_NAMES := {"GK": "Goalkeeper", "CB": "Centre-back", "FB": "Full-ba
 var season = null
 var players: Array = []
 var index: int = 0
-var club = null
+## Optional: func(player, box, profile) that adds action buttons to the profile.
+var actions: Callable
 
 var _card: PanelContainer
 
@@ -36,9 +37,9 @@ func _ready() -> void:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
 	_card = W.panel()
-	_card.custom_minimum_size = Vector2(820, 0)
+	_card.custom_minimum_size = Vector2(860, 0)
 	center.add_child(_card)
-	_render()
+	render()
 
 
 func _on_dim_input(ev: InputEvent) -> void:
@@ -64,19 +65,24 @@ func _step(d: int) -> void:
 	if players.is_empty():
 		return
 	index = (index + d + players.size()) % players.size()
-	_render()
+	render()
 
 
-func _render() -> void:
+func render() -> void:
 	W.clear_children(_card)
 	var p = players[index]
-	var root := W.vbox(14)
+	var club = null
+	if season != null:
+		var cid: String = season.club_of(p.id)
+		club = season.club(cid) if cid != "" else null
+	var mine: bool = season != null and club != null and club.id == season.user_club_id
+	var root := W.vbox(12)
 	_card.add_child(root)
 
 	var top := W.hbox(18)
 	root.add_child(top)
 	var pic = Portrait.new()
-	pic.custom_minimum_size = Vector2(170, 200)
+	pic.custom_minimum_size = Vector2(160, 190)
 	pic.setup(p, club.colours if club != null else ["#1f7a4d", "#ffffff"], UiTheme.c("panel2"))
 	top.add_child(pic)
 
@@ -84,19 +90,23 @@ func _render() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(info)
 	info.add_child(W.label(p.name, 26))
-	info.add_child(W.label("%s  ·  %d years  ·  %s%s" % [POSITION_NAMES.get(p.position, p.position), p.age, p.nationality,
-		("  ·  " + club.name) if club != null else ""], 14, "muted"))
+	info.add_child(W.label("%s  ·  %d years  ·  %s  ·  %s" % [POSITION_NAMES.get(p.position, p.position), p.age, p.nationality,
+		club.name if club != null else "Free agent"], 14, "muted"))
 	var badges := W.hbox(10)
 	info.add_child(badges)
 	badges.add_child(_big_number("OVR", str(p.overall), "accent"))
-	badges.add_child(_big_number("POT", str(p.potential), "text"))
+	badges.add_child(_big_number("POT", _potential_text(p, mine), "text"))
 	badges.add_child(_big_number("FIT", "%d%%" % roundi(p.fitness), "good" if p.fitness >= 85 else ("warn" if p.fitness >= 70 else "bad")))
 	badges.add_child(_big_number("MORALE", str(roundi(p.morale)), "good" if p.morale >= 70 else ("warn" if p.morale >= 50 else "bad")))
 	if p.injury_weeks > 0:
 		info.add_child(W.label("Injured: out for %d more week%s" % [p.injury_weeks, "" if p.injury_weeks == 1 else "s"], 15, "bad"))
-	info.add_child(W.label("Value %s  ·  Wage %s a week" % [money(p.value), money(p.wage)], 14, "text"))
+	var contract := "Contract until summer %d" % (p.contract_end + 1)
+	if p.loan_from != "" and season != null:
+		contract = "On loan from %s" % season.club(p.loan_from).name
+	info.add_child(W.label("Value %s  ·  Wage %s a week  ·  %s%s" % [money(p.value), money(p.wage), contract, "  ·  Transfer-listed" if p.listed else ""], 14, "text"))
 
 	var nav := W.vbox(8)
+	nav.custom_minimum_size = Vector2(200, 0)
 	top.add_child(nav)
 	var close_btn := W.button("Close")
 	close_btn.custom_minimum_size = Vector2(110, 36)
@@ -109,6 +119,9 @@ func _render() -> void:
 		var next := W.button("Next ▶")
 		next.pressed.connect(func(): _step(1))
 		nav.add_child(next)
+	if actions.is_valid():
+		nav.add_child(HSeparator.new())
+		actions.call(p, nav, self)
 
 	var cols := W.hbox(24)
 	root.add_child(cols)
@@ -149,6 +162,25 @@ func _render() -> void:
 	for pair in [["Apps", st["apps"]], ["Goals", st["goals"]], ["Assists", st["assists"]],
 			["Avg rating", avg], ["Yellows", st["yellows"]], ["Reds", st["reds"]]]:
 		grid.add_child(_big_number(pair[0], str(pair[1]), "text"))
+	if not p.career.is_empty():
+		side.add_child(W.heading("Career"))
+		var lines: Array = []
+		for c in p.career.slice(maxi(0, p.career.size() - 4)):
+			lines.append("%d/%02d %s: %d apps, %d goals, %.2f" % [int(c["year"]), (int(c["year"]) + 1) % 100, c["club"], int(c["apps"]), int(c["goals"]), float(c["avg"])])
+		side.add_child(W.wrap_label("\n".join(lines), 13, "text"))
+
+
+func _potential_text(p, mine: bool) -> String:
+	if mine or season == null:
+		return str(p.potential)
+	var scouting: int = int(season.user_club().facilities.get("scouting", 1))
+	if scouting >= 3:
+		return str(p.potential)
+	# Weak scouting only gives a range.
+	var spread: int = (4 - scouting) * 3
+	var seed_shift: int = absi(hash(p.id)) % (spread + 1)
+	var lo: int = maxi(p.overall, p.potential - seed_shift)
+	return "%d-%d" % [lo, mini(99, lo + spread)]
 
 
 func _big_number(caption: String, value: String, color_key: String) -> Control:

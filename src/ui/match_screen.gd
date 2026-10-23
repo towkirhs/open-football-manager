@@ -13,6 +13,8 @@ var app = null
 var engine = null
 ## 0 when the human's club is at home, 1 when away.
 var user_side: int = 0
+## Competition and round, shown above the score.
+var comp_name: String = ""
 
 var _timer: Timer
 var _score: Label
@@ -33,7 +35,7 @@ var _state: String = "playing"
 
 func _ready() -> void:
 	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 16)
 	add_child(margin)
@@ -45,6 +47,9 @@ func _ready() -> void:
 	var center := W.vbox(8)
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(center)
+	var comp_label := W.label(comp_name, 13, "muted")
+	comp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	center.add_child(comp_label)
 	_score = W.label("", 26)
 	_score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	center.add_child(_score)

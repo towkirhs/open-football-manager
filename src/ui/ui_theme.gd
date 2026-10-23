@@ -155,4 +155,26 @@ static func build() -> Theme:
 	t.set_color("font_pressed_color", "CheckBox", c("text"))
 	t.set_color("default_color", "RichTextLabel", c("text"))
 	t.set_stylebox("panel", "PanelContainer", _box(c("panel"), 10, 16.0))
+
+	# Text inputs (also inside number boxes)
+	t.set_stylebox("normal", "LineEdit", _box(c("panel2"), 8, 10.0, c("line")))
+	t.set_stylebox("focus", "LineEdit", _box(c("panel2"), 8, 10.0, c("accent")))
+	t.set_stylebox("read_only", "LineEdit", _box(c("panel"), 8, 10.0, c("line")))
+	t.set_color("font_color", "LineEdit", c("text"))
+	t.set_color("font_placeholder_color", "LineEdit", c("muted"))
+	t.set_color("caret_color", "LineEdit", c("accent"))
+	t.set_color("selection_color", "LineEdit", c("highlight"))
+
+	# Sliders and progress bars
+	var slider_track := _box(c("panel2"), 4, 0.0)
+	slider_track.content_margin_top = 3
+	slider_track.content_margin_bottom = 3
+	t.set_stylebox("slider", "HSlider", slider_track)
+	t.set_stylebox("grabber_area", "HSlider", _box(c("accent"), 4, 0.0))
+	t.set_stylebox("grabber_area_highlight", "HSlider", _box(c("accent"), 4, 0.0))
+	t.set_stylebox("background", "ProgressBar", _box(c("panel2"), 6, 0.0))
+	t.set_stylebox("fill", "ProgressBar", _box(c("accent"), 6, 0.0))
+	t.set_color("font_color", "ProgressBar", c("text"))
+	t.set_stylebox("panel", "TooltipPanel", _box(c("panel2"), 6, 8.0, c("line")))
+	t.set_color("font_color", "TooltipLabel", c("text"))
 	return t

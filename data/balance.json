@@ -47,6 +47,60 @@
     "attacking": {"creation": 1.15, "against": 1.12}
   },
 
+  "economy": {
+    "_comment": "Money. Values in euros; wages and most running costs are weekly.",
+    "value_base": 20000,
+    "value_growth": 0.17,
+    "wage_share_of_value": 1.4,
+    "_wage_curve": "Cheap players earn a smaller share of their value; above wage_curve_value wages grow more slowly.",
+    "wage_low_share": 1.05,
+    "wage_low_value": 150000,
+    "wage_curve_value": 3000000,
+    "wage_curve_exponent": 0.6,
+    "start_wage_share_of_income": 0.75,
+    "min_wage": 1200,
+    "tv_per_tier": {"1": 24000000, "2": 5000000, "3": 1200000, "4": 500000},
+    "tv_position_bonus": 0.4,
+    "fair_ticket": {"1": 40, "2": 24, "3": 16, "4": 11},
+    "price_elasticity": 1.3,
+    "sponsor_per_fan": 4.0,
+    "facility_upkeep": [0, 1500, 4000, 9000, 18000, 32000],
+    "facility_cost": [0, 0, 1500000, 5000000, 14000000, 35000000],
+    "stadium_seats_per_level": 6000,
+    "staff_wage_base": 100.0,
+    "staff_wage_growth": 0.05,
+    "loan_asset_share": 0.4,
+    "loan_rates": {"A": 0.04, "B": 0.06, "C": 0.09, "D": 0.12, "E": 0.15},
+    "advance_fee": 0.1,
+    "europe_entry": {"EC1": 6000000, "EC2": 2500000, "EC3": 1200000},
+    "europe_win": {"EC1": 900000, "EC2": 450000, "EC3": 250000},
+    "europe_stage": {"EC1": 5000000, "EC2": 2000000, "EC3": 1000000},
+    "cup_round_prize": 60000,
+    "owner_grant_share": 0.1,
+    "_foreign": "Clubs outside the playable leagues earn this share of first-division TV money, plus gate money every other week for their (unplayed) league games.",
+    "foreign_tv_share": 0.45
+  },
+
+  "quick_sim": {
+    "home_goals": 1.5,
+    "away_goals": 1.15,
+    "neutral_goals": 1.3,
+    "strength_factor": 0.055,
+    "injury_chance": 0.1
+  },
+
+  "development": {
+    "_comment": "Weekly training growth per attribute point, by age band.",
+    "growth_young": 0.13,
+    "growth_prime": 0.07,
+    "growth_settled": 0.025,
+    "decline_veteran": -0.035,
+    "focus_bonus": 1.6,
+    "ageing_decline": 1.5,
+    "familiarity_gain": 0.025,
+    "familiarity_loss": 0.01
+  },
+
   "match": {
     "slices": 18,
     "half_time_slice": 9,
