@@ -64,6 +64,19 @@ func copy():
 	return t
 
 
+func to_dict() -> Dictionary:
+	return {"formation": formation, "style": style, "mentality": mentality, "familiarity": familiarity}
+
+
+func load_dict(d: Dictionary) -> void:
+	formation = str(d.get("formation", "4-4-2"))
+	if not FORMATIONS.has(formation):
+		formation = "4-4-2"
+	style = int(d.get("style", Style.POSSESSION))
+	mentality = int(d.get("mentality", Mentality.BALANCED))
+	familiarity = float(d.get("familiarity", 0.8))
+
+
 func describe() -> String:
 	return "%s, %s, %s" % [formation, STYLE_NAMES[style], MENTALITY_NAMES[mentality]]
 

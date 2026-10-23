@@ -4,6 +4,9 @@ extends RefCounted
 
 const Tactics = preload("res://src/sim/tactics.gd")
 
+const FIRST: Array[String] = ["Alan", "Bernd", "Carlos", "Dmitri", "Erik", "Fabio", "Gerard", "Hans", "Ignacio", "Jurgen", "Kasper", "Lorenzo", "Marco", "Nuno", "Olaf", "Pep", "Rui", "Stefan", "Thierry", "Ulrich"]
+const LAST: Array[String] = ["Abbott", "Brandt", "Castro", "Dekker", "Eriksen", "Ferrante", "Grosso", "Halvorsen", "Iglesias", "Janssen", "Klopper", "Lindahl", "Moreau", "Novak", "Ortega", "Petrov", "Quinn", "Rademaker", "Salgado", "Tennant"]
+
 var name: String = "AI manager"
 var preferred_style: int = Tactics.Style.POSSESSION
 var backup_style: int = Tactics.Style.COUNTER
@@ -20,6 +23,21 @@ func setup_random(rng: RandomNumberGenerator) -> void:
 	var forms: Array = Tactics.formation_names()
 	preferred_formation = forms[rng.randi_range(0, forms.size() - 1)]
 	adaptiveness = rng.randf_range(0.2, 0.8)
+	name = "%s %s" % [FIRST[rng.randi_range(0, FIRST.size() - 1)], LAST[rng.randi_range(0, LAST.size() - 1)]]
+
+
+func to_dict() -> Dictionary:
+	return {"name": name, "preferred_style": preferred_style, "backup_style": backup_style,
+		"preferred_formation": preferred_formation, "adaptiveness": adaptiveness, "surprise_rate": surprise_rate}
+
+
+func load_dict(d: Dictionary) -> void:
+	name = str(d.get("name", name))
+	preferred_style = int(d.get("preferred_style", preferred_style))
+	backup_style = int(d.get("backup_style", backup_style))
+	preferred_formation = str(d.get("preferred_formation", preferred_formation))
+	adaptiveness = float(d.get("adaptiveness", adaptiveness))
+	surprise_rate = float(d.get("surprise_rate", surprise_rate))
 
 
 func familiarity_for(style: int) -> float:

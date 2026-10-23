@@ -314,17 +314,20 @@ func _try_chance(a: TeamSide, b: TeamSide, share: float, start_min: int, out: Ar
 		a.on_target += 1
 		_add_rating(a, shooter.id, "goal")
 		var text := "GOAL! %s scores for %s." % [shooter.name, a.name]
+		var assist_id := ""
 		if rng.randf() < float(_cfg["assist_rate"]):
 			var others := _active(a).filter(func(slot): return slot["player"] != shooter)
 			var assist_slot = _pick(others, func(slot): return float(PASS_WEIGHT[slot["role"]]) * pow(slot["player"].attr("passing") / 70.0, 2.0))
 			if assist_slot != null:
 				_add_rating(a, assist_slot["player"].id, "assist")
+				assist_id = assist_slot["player"].id
 				text += " Assist: %s." % assist_slot["player"].name
 		for slot in _active(b):
 			if DEFENSIVE_ROLES.has(slot["role"]):
 				_add_rating(b, slot["player"].id, "conceded")
 		var ev := _event(minute, "goal", side_key, text + "  (%d-%d)" % [home.goals, away.goals])
 		ev["player"] = shooter.id
+		ev["assist"] = assist_id
 		out.append(ev)
 	elif rng.randf() < float(_cfg["on_target_rate"]):
 		a.on_target += 1
@@ -347,17 +350,17 @@ func _discipline(s: TeamSide, start_min: int, out: Array) -> void:
 			var p = slot["player"]
 			var minute := start_min + rng.randi_range(1, 5)
 			if s.yellows.has(p.id):
-				out.append(_event(minute, "red", side_key, "Second yellow! %s (%s) is sent off." % [p.name, s.name]))
+				out.append(_event(minute, "red", side_key, "Second yellow! %s (%s) is sent off." % [p.name, s.name], p.id))
 				_send_off(s, p, minute, out)
 			else:
 				s.yellows[p.id] = 1
 				_add_rating(s, p.id, "yellow")
-				out.append(_event(minute, "yellow", side_key, "Yellow card: %s (%s)." % [p.name, s.name]))
+				out.append(_event(minute, "yellow", side_key, "Yellow card: %s (%s)." % [p.name, s.name], p.id))
 	if rng.randf() < float(_cfg["red_per_slice"]) * mult:
 		var slot = _pick(_active(s), func(sl): return float(CARD_WEIGHT[sl["role"]]))
 		if slot != null:
 			var minute := start_min + rng.randi_range(1, 5)
-			out.append(_event(minute, "red", side_key, "Straight red! %s (%s) is sent off." % [slot["player"].name, s.name]))
+			out.append(_event(minute, "red", side_key, "Straight red! %s (%s) is sent off." % [slot["player"].name, s.name], slot["player"].id))
 			_send_off(s, slot["player"], minute, out)
 
 
@@ -399,7 +402,7 @@ func _injury(s: TeamSide, start_min: int, out: Array) -> void:
 	var weeks := rng.randi_range(1, 6)
 	s.injured[p.id] = true
 	injuries.append({"id": p.id, "weeks": weeks})
-	out.append(_event(minute, "injury", "home" if s == home else "away", "%s (%s) is injured, out for about %d week%s." % [p.name, s.name, weeks, "" if weeks == 1 else "s"]))
+	out.append(_event(minute, "injury", "home" if s == home else "away", "%s (%s) is injured, out for about %d week%s." % [p.name, s.name, weeks, "" if weeks == 1 else "s"], p.id))
 	# Injured players are always replaced when a sub is left, for both human and AI sides.
 	var idx: int = s.lineup.slots.find(slot)
 	var best = _best_bench_for(s, slot["role"])
@@ -513,8 +516,8 @@ func _keeper(s: TeamSide):
 	return null
 
 
-func _event(minute: int, type: String, side_key: String, text: String) -> Dictionary:
-	return {"minute": minute, "type": type, "side": side_key, "player": "", "text": text}
+func _event(minute: int, type: String, side_key: String, text: String, player_id: String = "") -> Dictionary:
+	return {"minute": minute, "type": type, "side": side_key, "player": player_id, "text": text}
 
 
 ## Weighted random pick from items; weight_fn returns each item's weight.

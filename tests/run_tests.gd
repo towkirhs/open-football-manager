@@ -11,8 +11,11 @@ const AiManager = preload("res://src/sim/ai_manager.gd")
 const Gen = preload("res://src/sim/player_generator.gd")
 const Club = preload("res://src/sim/club.gd")
 const WorldLoader = preload("res://src/data/world_loader.gd")
+const Season = preload("res://src/sim/season.gd")
 
 const SAMPLE := "res://data/sample/sample_league.json"
+const UI_SCRIPTS := ["res://src/ui/app.gd", "res://src/ui/ui_theme.gd", "res://src/ui/new_game_screen.gd",
+	"res://src/ui/hub_screen.gd", "res://src/ui/match_screen.gd", "res://src/ui/widgets.gd"]
 
 var failures: int = 0
 ## --quick plays fewer games (used by the online build). Pass it after "--".
@@ -25,7 +28,8 @@ func _init() -> void:
 	print("\nScripts")
 	var compiled := true
 	for path in ["res://src/sim/match_engine.gd", "res://src/sim/tactics.gd", "res://src/sim/lineup.gd",
-			"res://src/sim/ai_manager.gd", "res://src/sim/player_generator.gd", "res://src/ui/match_screen.gd"]:
+			"res://src/sim/ai_manager.gd", "res://src/sim/player_generator.gd", "res://src/sim/season.gd",
+			"res://src/sim/fixtures.gd"] + UI_SCRIPTS:
 		var s = load(path)
 		if s == null or not s.can_instantiate():
 			print("  could not compile " + path)
@@ -35,6 +39,7 @@ func _init() -> void:
 		quit(1)
 		return
 	test_matchup_table()
+	test_season()
 	test_determinism()
 	test_league_averages()
 	test_tactics_matter()
@@ -223,7 +228,7 @@ func test_league_averages() -> void:
 	for k in 5:
 		top5 += table[by_strength[k].name]
 		bottom5 += table[by_strength[by_strength.size() - 1 - k].name]
-	print("  points over 5 seasons: strongest 5 clubs avg %.0f, weakest 5 avg %.0f" % [top5 / 5.0, bottom5 / 5.0])
+	print("  points over %d seasons: strongest 5 clubs avg %.0f, weakest 5 avg %.0f" % [2 if quick else 5, top5 / 5.0, bottom5 / 5.0])
 	check(top5 > bottom5 * 1.4, "stronger squads earn clearly more points")
 
 
@@ -264,3 +269,79 @@ func test_formation_balance() -> void:
 		if r["win"] < 0.25 or r["win"] > 0.52:
 			ok = false
 	check(ok, "no formation is broken against 4-4-2 (win rate 25-52%)")
+
+
+func test_season() -> void:
+	print("\nA full season")
+	var league := WorldLoader.load_league(SAMPLE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var season = Season.new()
+	var user_id: String = league["clubs"][0].id
+	season.new_game(league, user_id, rng)
+	check(season.total_weeks() == 38, "20 clubs play a 38-week season")
+
+	# Week 1: watch the human's game live, with a half-time pause.
+	var e = season.prepare_user_match(rng)
+	var paused := false
+	while not e.finished:
+		e.step()
+		if e.is_half_time():
+			paused = true
+			e.resume()
+	season.play_week(rng, e)
+	check(paused, "live match pauses at half-time")
+	check(not season.user_result(0).is_empty(), "the human's live result is recorded")
+
+	# Save mid-season and load into a fresh career.
+	var path := "user://test_career.json"
+	check(season.save(path) == OK, "career saves")
+	var loaded = Season.new()
+	check(loaded.load_from(path), "career loads")
+	check(loaded.standings() == season.standings() and loaded.week == season.week, "loaded career matches the saved one")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	while not season.is_finished():
+		season.play_week(rng)
+	var games := 0
+	for wk in season.results:
+		games += wk.size()
+	check(games == 380, "380 games played")
+	var ok := true
+	var home_games := {}
+	var total_gf := 0
+	var total_ga := 0
+	for wk in season.results:
+		for r in wk:
+			home_games[r["home"]] = home_games.get(r["home"], 0) + 1
+	for id in season.table:
+		var t: Dictionary = season.table[id]
+		total_gf += t["gf"]
+		total_ga += t["ga"]
+		if t["p"] != 38 or t["w"] + t["d"] + t["l"] != 38 or t["pts"] != 3 * t["w"] + t["d"] or home_games.get(id, 0) != 19:
+			ok = false
+	check(ok, "every club plays 38 (19 at home) and the points add up")
+	var longest := 0
+	for c in league["clubs"]:
+		var run := 0
+		var prev := ""
+		for w in season.total_weeks():
+			for m in season.fixtures[w]:
+				if m[0] == c.id or m[1] == c.id:
+					var v := "H" if m[0] == c.id else "A"
+					run = run + 1 if v == prev else 1
+					prev = v
+					longest = maxi(longest, run)
+	print("  longest run of home or away games: %d" % longest)
+	check(longest <= 3, "no club plays more than 3 home or 3 away games in a row")
+	check(total_gf == total_ga, "goals for and against balance across the league")
+	var order: Array = season.standings()
+	var top = season.club(order[0])
+	var bottom = season.club(order[order.size() - 1])
+	print("  champions %s (%d pts, squad %.1f), bottom %s (%d pts, squad %.1f)" % [top.name, season.table[order[0]]["pts"], top.average_overall(), bottom.name, season.table[order[order.size() - 1]]["pts"], bottom.average_overall()])
+	var scorers: Array = season.top_scorers(3)
+	if not scorers.is_empty():
+		print("  top scorer %s (%s) %d goals" % [scorers[0]["name"], scorers[0]["club"], scorers[0]["goals"]])
+	check(season.history.size() == 1, "season end is recorded in the club history")
+	season.next_season(rng)
+	check(season.week == 0 and season.table[user_id]["pts"] == 0 and season.total_weeks() == 38, "next season starts fresh")

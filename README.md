@@ -7,24 +7,34 @@ A free, open-source, offline football club management game. Build a squad, set y
 - **Tactics matter.** Five playing styles, each strong against two and weak against two. A smaller club with the right plan can beat a bigger one.
 - **Personal learning project.** Non-commercial; built to learn game development.
 
+## Play it in your browser
+
+**https://towkirhs.github.io/open-football-manager/**
+
+The link always has the latest version: every push to `main` runs the tests, builds the web version and publishes it. Your career is saved in the browser.
+
 ## Status
 
 Early development. What works now:
 
+- [x] Career mode: pick a club and play a full 38-week league season
+- [x] Club hub: next match with opponent scouting, your tactics, league table, recent results, inbox
+- [x] Squad, League (table and top scorers), Fixtures and Settings screens
+- [x] Live matches with a text feed; change formation, style or mentality at half-time; or quick-sim
 - [x] Match engine with formations, playing styles, mentality, familiarity and player fit
-- [x] Cards, injuries, fatigue, substitutions and player ratings
-- [x] AI managers who pick tactics, counter your style and react at half-time
-- [x] Match screen: pick two clubs, set tactics, watch the text feed, change tactics at half-time
+- [x] Cards, injuries, fatigue, substitutions, player ratings and season stats
+- [x] AI managers who pick tactics, scout and counter your style, and react at half-time
+- [x] Autosave, and five colour themes
 - [x] Fictional 20-club sample league
-- [x] Headless balance tests
+- [x] Headless tests and balance report
 
-Next up (see the roadmap below): a full season with fixtures and a league table.
+Next up (see the roadmap below): squad screens with player profiles and lineup picking.
 
 ## Running it
 
 1. Install [Godot 4.3 or newer](https://godotengine.org/download) (the standard version, not .NET).
 2. Open Godot, choose **Import**, and select this folder's `project.godot`.
-3. Press **F5** to run. The match screen opens.
+3. Press **F5** to run.
 
 ### Tests
 
@@ -34,7 +44,7 @@ The simulation can be tested without any UI:
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 
-It plays thousands of matches and prints a balance report: goals per game, home advantage, how often an underdog wins with the right and wrong tactics, and whether any formation is broken. The last line says `ALL CHECKS PASSED` when everything is within range.
+It plays thousands of matches and a full season, then prints a balance report: goals per game, home advantage, how often an underdog wins with the right and wrong tactics, whether any formation is broken, and whether fixtures, the table and saving work. The last line says `ALL CHECKS PASSED` when everything is within range. Add `-- --quick` at the end for a faster run.
 
 ### Regenerating the sample league
 
@@ -81,7 +91,7 @@ This repository only contains fictional data. Real clubs, players and photos are
 1. [x] Project setup and fictional sample league
 2. [x] Match engine
 3. [x] Tactics: formations, styles, matchups, familiarity, fit
-4. [ ] One full season: fixtures, weekly Continue, league table, results
+4. [x] One full season: fixtures, weekly Continue, league table, results
 5. [ ] Squad screens: squad list, player profile, lineup and tactics
 6. [ ] League pyramids with promotion and relegation; season rollover
 7. [ ] Finances, owner goals and the bank (loans and advances)
