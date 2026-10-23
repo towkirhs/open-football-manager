@@ -1,7 +1,7 @@
 name: Test and publish web build
 
-# On every push to main: run the simulation tests, export the game for the web,
-# and publish it to GitHub Pages so the latest version is playable from a link.
+# On every push to main: run the simulation tests, export the game for the web and
+# publish it on the gh-pages branch, which GitHub Pages serves as the play link.
 
 on:
   push:
@@ -9,9 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -60,17 +58,14 @@ jobs:
           mkdir -p build/web
           ./godot-bin/godot --headless --path . --export-release "Web" build/web/index.html
           test -f build/web/index.pck
+          touch build/web/.nojekyll
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: build/web
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish to the gh-pages branch
+        run: |
+          cd build/web
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Web build of ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

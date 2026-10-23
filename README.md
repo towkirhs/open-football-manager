@@ -11,11 +11,11 @@ A free, open-source, offline football club management game. Start in the bottom 
 
 **https://towkirhs.github.io/open-football-manager/**
 
-Every push to `main` runs the tests, builds the web version and publishes it to that link. Your career is saved in the browser.
+Every push to `main` runs the tests, builds the web version and publishes it to the `gh-pages` branch, which serves that link. Your career is saved in the browser.
 
 **On an Android phone:** open the link in Chrome, then menu → **Add to Home screen** (or **Install app**). It then opens full-screen like an app and works offline.
 
-> First time only: in the repository go to **Settings → Pages → Source** and pick **GitHub Actions**, then re-run the latest "Web build" workflow. After that the link stays up to date on its own.
+> First time only: in the repository go to **Settings → Pages**, set **Source** to **Deploy from a branch**, pick the **gh-pages** branch and the **/ (root)** folder, and save. After a minute the link works, and every later push updates it.
 
 ## What's in the game
 

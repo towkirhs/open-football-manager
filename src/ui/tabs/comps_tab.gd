@@ -81,7 +81,7 @@ func _league(l) -> void:
 	if l.tier > 1:
 		note += "  ·  top %d go up" % _promoted_places(l)
 	left.add_child(W.label(note, 13, "muted"))
-	var t := W.table(["#", "Club", "P", "W", "D", "L", "GF", "GA", "GD", "Pts", "Form"], [34, 0, 40, 40, 40, 40, 44, 44, 48, 48, 80])
+	var t := W.table(["#", "Club", "P", "W", "D", "L", "GF", "GA", "GD", "Pts", "Form"], [46, 0, 40, 40, 40, 40, 44, 44, 48, 48, 80])
 	left.add_child(t)
 	var order: Array = l.standings()
 	var up: int = _promoted_places(l) if l.tier > 1 else 0

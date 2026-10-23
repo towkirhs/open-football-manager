@@ -280,7 +280,7 @@ func _mini_table() -> Control:
 	if l == null:
 		return card
 	v.add_child(W.heading(l.name))
-	var t := W.table(["#", "Club", "P", "GD", "Pts"], [34, 0, 40, 48, 48])
+	var t := W.table(["#", "Club", "P", "GD", "Pts"], [46, 0, 40, 48, 48])
 	t.size_flags_vertical = Control.SIZE_FILL
 	t.scroll_vertical_enabled = false
 	v.add_child(t)
