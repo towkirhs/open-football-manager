@@ -15,9 +15,12 @@ const WorldLoader = preload("res://src/data/world_loader.gd")
 const SAMPLE := "res://data/sample/sample_league.json"
 
 var failures: int = 0
+## --quick plays fewer games (used by the online build). Pass it after "--".
+var quick: bool = false
 
 
 func _init() -> void:
+	quick = OS.get_cmdline_user_args().has("--quick")
 	var t0 := Time.get_ticks_msec()
 	print("\nScripts")
 	var compiled := true
@@ -157,7 +160,7 @@ func test_determinism() -> void:
 
 
 func test_league_averages() -> void:
-	print("\nSample league, 5 seasons with AI managers")
+	print("\nSample league, %d seasons with AI managers" % (2 if quick else 5))
 	var clubs: Array = WorldLoader.load_league(SAMPLE)["clubs"]
 	check(clubs.size() == 20, "sample league has 20 clubs")
 	if clubs.size() < 2:
@@ -179,7 +182,7 @@ func test_league_averages() -> void:
 	var table := {}
 	for c in clubs:
 		table[c.name] = 0
-	for _season in 5:
+	for _season in (2 if quick else 5):
 		for i in clubs.size():
 			for j in clubs.size():
 				if i == j:
@@ -225,12 +228,12 @@ func test_league_averages() -> void:
 
 
 func test_tactics_matter() -> void:
-	print("\nUnderdog vs favourite (8 overall points apart), 4,000 games each")
+	print("\nUnderdog vs favourite (8 overall points apart)")
 	var strong = make_club("Favourite", 76, 11)
 	var weak = make_club("Underdog", 68, 12)
 	print("  favourite avg overall %.1f, underdog %.1f" % [strong.average_overall(), weak.average_overall()])
 	var fav_t = make_tactics("4-3-3", Tactics.Style.POSSESSION)
-	var n := 4000
+	var n := 2000 if quick else 4000
 	var same := record(weak, strong, make_tactics("4-3-3", Tactics.Style.POSSESSION), fav_t, n, 21)
 	var counter := record(weak, strong, make_tactics("4-3-3", Tactics.Style.COUNTER), fav_t, n, 22)
 	var press := record(weak, strong, make_tactics("4-3-3", Tactics.Style.HIGH_PRESS), fav_t, n, 23)
@@ -250,13 +253,13 @@ func test_tactics_matter() -> void:
 
 
 func test_formation_balance() -> void:
-	print("\nFormations (equal squads, same style, 2,000 games each vs 4-4-2)")
+	print("\nFormations (equal squads, same style, vs 4-4-2)")
 	var a = make_club("A", 72, 31)
 	var b = make_club("B", 72, 31)
 	var base = make_tactics("4-4-2", Tactics.Style.POSSESSION)
 	var ok := true
 	for f in Tactics.formation_names():
-		var r := record(a, b, make_tactics(f, Tactics.Style.POSSESSION), base, 2000, 40 + f.length())
+		var r := record(a, b, make_tactics(f, Tactics.Style.POSSESSION), base, 800 if quick else 2000, 40 + f.length())
 		print("  %-8s %s" % [f, fmt(r)])
 		if r["win"] < 0.25 or r["win"] > 0.52:
 			ok = false

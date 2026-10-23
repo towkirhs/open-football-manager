@@ -290,7 +290,7 @@ func _try_chance(a: TeamSide, b: TeamSide, share: float, start_min: int, out: Ar
 	p *= float(sa["creation"]) * float(ma["creation"]) * float(sb["against"]) * float(mb["against"])
 	p *= 1.0 + float(_cfg["matchup_creation_bonus"]) * edge
 	if a == home:
-		p *= 1.0 + float(_cfg["home_advantage"])
+		p *= 1.0 + float(_cfg["home_creation_bonus"])
 	if rng.randf() >= clampf(p, 0.0, 0.95):
 		return
 
@@ -301,6 +301,8 @@ func _try_chance(a: TeamSide, b: TeamSide, share: float, start_min: int, out: Ar
 	a.shots += 1
 	var conv: float = float(_cfg["base_conversion"]) * pow(ratio, float(_cfg["quality_exponent"]))
 	conv *= float(sa["quality"]) * (1.0 + float(_cfg["matchup_quality_bonus"]) * edge)
+	if a == home:
+		conv *= 1.0 + float(_cfg["home_quality_bonus"])
 	conv *= pow(shooter.attr("shooting") / 70.0, float(_cfg["shooter_exponent"]))
 	conv *= clampf(float(_cfg["gk_base"]) - b.lines["gk"] / float(_cfg["gk_divisor"]), 0.6, 1.4)
 	conv = clampf(conv, 0.02, 0.5)

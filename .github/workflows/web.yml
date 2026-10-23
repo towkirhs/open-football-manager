@@ -1,0 +1,76 @@
+name: Test and publish web build
+
+# On every push to main: run the simulation tests, export the game for the web,
+# and publish it to GitHub Pages so the latest version is playable from a link.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Download Godot and web templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p godot-bin && cd godot-bin
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz "templates/web_nothreads_*" "templates/version.txt"
+          rm -f *.zip *.tpz
+
+      - name: Install templates
+        run: |
+          T=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$T"
+          cp godot-bin/templates/* "$T"/
+
+      - name: Run simulation tests
+        run: |
+          ./godot-bin/godot --headless --path . -s res://tests/run_tests.gd -- --quick | tee test.log
+          grep -q "ALL CHECKS PASSED" test.log
+
+      - name: Export web build
+        run: |
+          mkdir -p build/web
+          ./godot-bin/godot --headless --path . --export-release "Web" build/web/index.html
+          test -f build/web/index.pck
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

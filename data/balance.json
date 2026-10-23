@@ -50,7 +50,9 @@
   "match": {
     "slices": 18,
     "half_time_slice": 9,
-    "home_advantage": 0.10,
+    "home_advantage": 0.05,
+    "home_creation_bonus": 0.12,
+    "home_quality_bonus": 0.12,
     "possession_exponent": 2.0,
     "possession_min": 0.25,
     "possession_max": 0.75,
