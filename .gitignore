@@ -1,0 +1,21 @@
+# Godot cache and builds
+.godot/
+export/
+*.apk
+*.aab
+*.exe
+*.pck
+
+# Real-world data and photos stay on your own machine only.
+# The import scripts write here; never commit it.
+private_data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.tmp

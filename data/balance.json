@@ -1,0 +1,94 @@
+{
+  "_comment": "Every tunable number for the simulation lives here. Change values and re-run tests/run_tests.gd to see the effect.",
+
+  "role_weights": {
+    "GK": {"goalkeeping": 1.0},
+    "CB": {"defending": 0.5, "physical": 0.3, "pace": 0.1, "passing": 0.1},
+    "FB": {"defending": 0.35, "pace": 0.3, "physical": 0.15, "passing": 0.2},
+    "WB": {"pace": 0.3, "defending": 0.25, "passing": 0.25, "physical": 0.2},
+    "DM": {"defending": 0.4, "passing": 0.35, "physical": 0.25},
+    "CM": {"passing": 0.45, "dribbling": 0.2, "defending": 0.15, "physical": 0.2},
+    "AM": {"passing": 0.4, "dribbling": 0.35, "shooting": 0.25},
+    "WG": {"pace": 0.4, "dribbling": 0.35, "passing": 0.1, "shooting": 0.15},
+    "ST": {"shooting": 0.55, "pace": 0.2, "physical": 0.15, "dribbling": 0.1}
+  },
+
+  "_line_contribution": "How much each role adds to the team's defence, midfield and attack lines: [def, mid, att].",
+  "line_contribution": {
+    "CB": [1.0, 0.1, 0.0],
+    "FB": [0.7, 0.3, 0.2],
+    "WB": [0.5, 0.4, 0.35],
+    "DM": [0.5, 0.8, 0.1],
+    "CM": [0.2, 1.0, 0.3],
+    "AM": [0.0, 0.6, 0.8],
+    "WG": [0.1, 0.4, 0.9],
+    "ST": [0.0, 0.1, 1.0]
+  },
+
+  "position_fit": {
+    "same": 1.0,
+    "related": 0.88,
+    "other": 0.72,
+    "outfield_in_goal": 0.25,
+    "keeper_outfield": 0.35
+  },
+
+  "styles": {
+    "counter":    {"possession": -0.06, "creation": 0.95, "quality": 1.08, "against": 0.97, "fatigue": 1.0,  "cards": 1.0,  "fit": {"pace": 0.5, "shooting": 0.3, "dribbling": 0.2}},
+    "possession": {"possession":  0.07, "creation": 1.05, "quality": 1.0,  "against": 0.95, "fatigue": 0.95, "cards": 0.9,  "fit": {"passing": 0.6, "dribbling": 0.4}},
+    "high_press": {"possession":  0.03, "creation": 1.08, "quality": 1.0,  "against": 1.05, "fatigue": 1.35, "cards": 1.25, "fit": {"physical": 0.6, "pace": 0.4}},
+    "long_ball":  {"possession": -0.04, "creation": 1.0,  "quality": 0.97, "against": 1.0,  "fatigue": 1.0,  "cards": 1.05, "fit": {"physical": 0.6, "shooting": 0.4}},
+    "low_block":  {"possession": -0.08, "creation": 0.85, "quality": 1.0,  "against": 0.8,  "fatigue": 0.85, "cards": 1.1,  "fit": {"defending": 0.7, "physical": 0.3}}
+  },
+
+  "mentality": {
+    "defensive": {"creation": 0.88, "against": 0.85},
+    "balanced":  {"creation": 1.0,  "against": 1.0},
+    "attacking": {"creation": 1.15, "against": 1.12}
+  },
+
+  "match": {
+    "slices": 18,
+    "half_time_slice": 9,
+    "home_advantage": 0.10,
+    "possession_exponent": 2.0,
+    "possession_min": 0.25,
+    "possession_max": 0.75,
+    "chance_rate": 0.92,
+    "share_exponent": 0.5,
+    "creation_exponent": 0.9,
+    "base_conversion": 0.14,
+    "quality_exponent": 1.5,
+    "shooter_exponent": 1.2,
+    "matchup_creation_bonus": 0.18,
+    "matchup_quality_bonus": 0.28,
+    "gk_base": 1.35,
+    "gk_divisor": 200.0,
+    "fit_scale": 25.0,
+    "fit_min": 0.7,
+    "fit_max": 1.2,
+    "line_coverage_exponent": 0.35,
+    "yellow_per_slice": 0.09,
+    "red_per_slice": 0.0015,
+    "injury_per_slice": 0.006,
+    "assist_rate": 0.75,
+    "on_target_rate": 0.45,
+    "fatigue_per_slice": 0.9,
+    "max_subs": 5,
+    "ai_sub_slices": [12, 14]
+  },
+
+  "ratings": {
+    "start": 6.0,
+    "goal": 1.0,
+    "assist": 0.6,
+    "save": 0.15,
+    "conceded": -0.25,
+    "clean_sheet": 0.5,
+    "win": 0.4,
+    "loss": -0.3,
+    "yellow": -0.3,
+    "red": -1.5,
+    "noise": 0.3
+  }
+}

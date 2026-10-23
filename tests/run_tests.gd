@@ -1,0 +1,263 @@
+extends SceneTree
+## Simulation tests and balance report. Runs without any UI.
+##
+## Run:  godot --headless --path . -s res://tests/run_tests.gd
+## Exit code is 0 when every check passes.
+
+const Tactics = preload("res://src/sim/tactics.gd")
+const MatchEngine = preload("res://src/sim/match_engine.gd")
+const Lineup = preload("res://src/sim/lineup.gd")
+const AiManager = preload("res://src/sim/ai_manager.gd")
+const Gen = preload("res://src/sim/player_generator.gd")
+const Club = preload("res://src/sim/club.gd")
+const WorldLoader = preload("res://src/data/world_loader.gd")
+
+const SAMPLE := "res://data/sample/sample_league.json"
+
+var failures: int = 0
+
+
+func _init() -> void:
+	var t0 := Time.get_ticks_msec()
+	print("\nScripts")
+	var compiled := true
+	for path in ["res://src/sim/match_engine.gd", "res://src/sim/tactics.gd", "res://src/sim/lineup.gd",
+			"res://src/sim/ai_manager.gd", "res://src/sim/player_generator.gd", "res://src/ui/match_screen.gd"]:
+		var s = load(path)
+		if s == null or not s.can_instantiate():
+			print("  could not compile " + path)
+			compiled = false
+	check(compiled, "all scripts compile")
+	if failures > 0:
+		quit(1)
+		return
+	test_matchup_table()
+	test_determinism()
+	test_league_averages()
+	test_tactics_matter()
+	test_formation_balance()
+	print("\nFinished in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
+	if failures == 0:
+		print("ALL CHECKS PASSED")
+	else:
+		print("%d CHECK(S) FAILED" % failures)
+	quit(1 if failures > 0 else 0)
+
+
+func check(ok: bool, label: String) -> void:
+	print("  [%s] %s" % ["ok" if ok else "FAIL", label])
+	if not ok:
+		failures += 1
+
+
+# ---------------------------------------------------------------- helpers
+
+func make_club(id: String, level: float, seed_value: int, bias: Dictionary = {}):
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var c = Club.new()
+	c.id = id
+	c.name = id
+	c.players = Gen.make_squad(rng, id, level, bias)
+	return c
+
+
+func make_tactics(formation: String, style: int, mentality: int = Tactics.Mentality.BALANCED, familiarity: float = 0.85):
+	var t = Tactics.new()
+	t.formation = formation
+	t.style = style
+	t.mentality = mentality
+	t.familiarity = familiarity
+	return t
+
+
+func play(home_club, away_club, ht, at, rng: RandomNumberGenerator, home_ai = null, away_ai = null) -> Dictionary:
+	var hl = Lineup.new()
+	hl.auto_pick(home_club.players, ht.formation)
+	var al = Lineup.new()
+	al.auto_pick(away_club.players, at.formation)
+	var e = MatchEngine.new()
+	e.setup(home_club.name, hl, ht.copy(), away_club.name, al, at.copy(), rng)
+	if home_ai != null:
+		e.set_ai(0, home_ai)
+	if away_ai != null:
+		e.set_ai(1, away_ai)
+	return e.simulate()
+
+
+## Win/draw/loss rates for club_a over n games, half at home and half away.
+func record(club_a, club_b, ta, tb, n: int, seed_value: int) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var w := 0
+	var d := 0
+	var goals_for := 0
+	var goals_against := 0
+	for i in n:
+		var a_home := i % 2 == 0
+		var r: Dictionary
+		var gf: int
+		var ga: int
+		if a_home:
+			r = play(club_a, club_b, ta, tb, rng)
+			gf = r["home_goals"]
+			ga = r["away_goals"]
+		else:
+			r = play(club_b, club_a, tb, ta, rng)
+			gf = r["away_goals"]
+			ga = r["home_goals"]
+		goals_for += gf
+		goals_against += ga
+		if gf > ga:
+			w += 1
+		elif gf == ga:
+			d += 1
+	return {"win": float(w) / n, "draw": float(d) / n, "loss": float(n - w - d) / n,
+		"gf": float(goals_for) / n, "ga": float(goals_against) / n}
+
+
+func fmt(r: Dictionary) -> String:
+	return "win %4.1f%%  draw %4.1f%%  loss %4.1f%%   goals %.2f - %.2f" % [r["win"] * 100, r["draw"] * 100, r["loss"] * 100, r["gf"], r["ga"]]
+
+
+# ---------------------------------------------------------------- tests
+
+func test_matchup_table() -> void:
+	print("\nStyle matchups")
+	var ok := true
+	for a in 5:
+		var wins := 0
+		var losses := 0
+		for b in 5:
+			var m := Tactics.matchup(a, b)
+			if m != -Tactics.matchup(b, a):
+				ok = false
+			if m == 1:
+				wins += 1
+			elif m == -1:
+				losses += 1
+		if wins != 2 or losses != 2:
+			ok = false
+	check(ok, "each style beats two styles and loses to two, symmetrically")
+
+
+func test_determinism() -> void:
+	print("\nDeterminism")
+	var a = make_club("A", 72, 1)
+	var b = make_club("B", 70, 2)
+	var t = make_tactics("4-4-2", Tactics.Style.POSSESSION)
+	var r1 := RandomNumberGenerator.new()
+	r1.seed = 99
+	var r2 := RandomNumberGenerator.new()
+	r2.seed = 99
+	var x := play(a, b, t, t, r1)
+	var y := play(a, b, t, t, r2)
+	check(x["home_goals"] == y["home_goals"] and x["away_goals"] == y["away_goals"] and x["events"].size() == y["events"].size(),
+		"same seed gives the same match")
+
+
+func test_league_averages() -> void:
+	print("\nSample league, 5 seasons with AI managers")
+	var clubs: Array = WorldLoader.load_league(SAMPLE)["clubs"]
+	check(clubs.size() == 20, "sample league has 20 clubs")
+	if clubs.size() < 2:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var managers: Array = []
+	for c in clubs:
+		var m = AiManager.new()
+		m.setup_random(rng)
+		managers.append(m)
+	var games := 0
+	var goals := 0
+	var hw := 0
+	var dr := 0
+	var shots := 0
+	var cards := 0
+	var injuries := 0
+	var table := {}
+	for c in clubs:
+		table[c.name] = 0
+	for _season in 5:
+		for i in clubs.size():
+			for j in clubs.size():
+				if i == j:
+					continue
+				var ht = managers[i].pick_tactics(-1, rng)
+				var at = managers[j].pick_tactics(ht.style if rng.randf() < 0.5 else -1, rng)
+				var r := play(clubs[i], clubs[j], ht, at, rng, managers[i], managers[j])
+				games += 1
+				goals += r["home_goals"] + r["away_goals"]
+				shots += r["home_shots"] + r["away_shots"]
+				injuries += r["injuries"].size()
+				for ev in r["events"]:
+					if ev["type"] == "yellow" or ev["type"] == "red":
+						cards += 1
+				if r["home_goals"] > r["away_goals"]:
+					hw += 1
+					table[clubs[i].name] += 3
+				elif r["home_goals"] == r["away_goals"]:
+					dr += 1
+					table[clubs[i].name] += 1
+					table[clubs[j].name] += 1
+				else:
+					table[clubs[j].name] += 3
+	var avg_goals := float(goals) / games
+	var home_rate := float(hw) / games
+	var draw_rate := float(dr) / games
+	print("  %d games: %.2f goals/game, %.1f shots/game, %.2f cards/game, %.2f injuries/game" % [games, avg_goals, float(shots) / games, float(cards) / games, float(injuries) / games])
+	print("  home wins %.1f%%, draws %.1f%%, away wins %.1f%%" % [home_rate * 100, draw_rate * 100, (1.0 - home_rate - draw_rate) * 100])
+	check(avg_goals >= 2.3 and avg_goals <= 3.2, "average goals per game between 2.3 and 3.2")
+	check(home_rate >= 0.38 and home_rate <= 0.55, "home win rate between 38% and 55%")
+	check(draw_rate >= 0.18 and draw_rate <= 0.33, "draw rate between 18% and 33%")
+
+	# Points over 5 seasons should follow squad strength, but not perfectly.
+	var by_strength: Array = clubs.duplicate()
+	by_strength.sort_custom(func(a, b): return a.average_overall() > b.average_overall())
+	var top5 := 0
+	var bottom5 := 0
+	for k in 5:
+		top5 += table[by_strength[k].name]
+		bottom5 += table[by_strength[by_strength.size() - 1 - k].name]
+	print("  points over 5 seasons: strongest 5 clubs avg %.0f, weakest 5 avg %.0f" % [top5 / 5.0, bottom5 / 5.0])
+	check(top5 > bottom5 * 1.4, "stronger squads earn clearly more points")
+
+
+func test_tactics_matter() -> void:
+	print("\nUnderdog vs favourite (8 overall points apart), 4,000 games each")
+	var strong = make_club("Favourite", 76, 11)
+	var weak = make_club("Underdog", 68, 12)
+	print("  favourite avg overall %.1f, underdog %.1f" % [strong.average_overall(), weak.average_overall()])
+	var fav_t = make_tactics("4-3-3", Tactics.Style.POSSESSION)
+	var n := 4000
+	var same := record(weak, strong, make_tactics("4-3-3", Tactics.Style.POSSESSION), fav_t, n, 21)
+	var counter := record(weak, strong, make_tactics("4-3-3", Tactics.Style.COUNTER), fav_t, n, 22)
+	var press := record(weak, strong, make_tactics("4-3-3", Tactics.Style.HIGH_PRESS), fav_t, n, 23)
+	var wrong := record(weak, strong, make_tactics("4-3-3", Tactics.Style.LONG_BALL), fav_t, n, 24)
+	print("  underdog, same style (possession):   " + fmt(same))
+	print("  underdog, counter-attack (beats it): " + fmt(counter))
+	print("  underdog, high press (beats it):     " + fmt(press))
+	print("  underdog, long ball (loses to it):   " + fmt(wrong))
+	check(counter["win"] > same["win"] and same["win"] > wrong["win"], "right tactic > same tactic > wrong tactic")
+	check(counter["win"] >= 0.25 and counter["win"] <= 0.35, "underdog with the right tactic wins 25-35%")
+	check(same["win"] < 0.22, "underdog with no tactical edge wins under 22%")
+
+	var fit_weak = make_club("Fast underdog", 68, 12, {"pace": 4, "shooting": 2})
+	var fitted := record(fit_weak, strong, make_tactics("4-3-3", Tactics.Style.COUNTER, Tactics.Mentality.BALANCED, 1.0), fav_t, n, 25)
+	print("  pacey underdog, well-drilled counter: " + fmt(fitted))
+	check(fitted["win"] > counter["win"], "players who suit the style and full familiarity add to the edge")
+
+
+func test_formation_balance() -> void:
+	print("\nFormations (equal squads, same style, 2,000 games each vs 4-4-2)")
+	var a = make_club("A", 72, 31)
+	var b = make_club("B", 72, 31)
+	var base = make_tactics("4-4-2", Tactics.Style.POSSESSION)
+	var ok := true
+	for f in Tactics.formation_names():
+		var r := record(a, b, make_tactics(f, Tactics.Style.POSSESSION), base, 2000, 40 + f.length())
+		print("  %-8s %s" % [f, fmt(r)])
+		if r["win"] < 0.25 or r["win"] > 0.52:
+			ok = false
+	check(ok, "no formation is broken against 4-4-2 (win rate 25-52%)")
