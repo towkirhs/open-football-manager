@@ -1,0 +1,52 @@
+{
+  "_comment": "How build_world.py turns a players dataset into a world. League names must match the dataset's league_name column (run with --list-leagues to see them). Matching ignores case and accents. This file contains names only, no player data.",
+
+  "name": "Real world (private)",
+  "start_year": 2026,
+
+  "playable": [
+    {"country": "ENG", "name": "England", "cup": "FA Cup", "leagues": [
+      {"names": ["Premier League", "English Premier League"], "display": "Premier League", "relegate": 3},
+      {"names": ["Championship", "EFL Championship", "English League Championship"], "display": "Championship", "relegate": 3},
+      {"names": ["League One", "EFL League One", "English League One"], "display": "League One", "relegate": 4},
+      {"names": ["League Two", "EFL League Two", "English League Two"], "display": "League Two", "relegate": 0}
+    ]},
+    {"country": "ESP", "name": "Spain", "cup": "Copa del Rey", "leagues": [
+      {"names": ["La Liga", "LaLiga", "LALIGA EA SPORTS", "Spain Primera Division", "Primera División"], "display": "La Liga", "relegate": 3},
+      {"names": ["La Liga 2", "LaLiga 2", "LALIGA HYPERMOTION", "Segunda División", "Spain Segunda Division", "LaLiga Hypermotion"], "display": "Segunda División", "relegate": 0}
+    ]},
+    {"country": "GER", "name": "Germany", "cup": "DFB-Pokal", "leagues": [
+      {"names": ["Bundesliga", "German 1. Bundesliga", "1. Bundesliga"], "display": "Bundesliga", "relegate": 3},
+      {"names": ["2. Bundesliga", "German 2. Bundesliga"], "display": "2. Bundesliga", "relegate": 3},
+      {"names": ["3. Liga", "German 3. Liga", "3. Bundesliga"], "display": "3. Liga", "relegate": 0}
+    ]}
+  ],
+
+  "_foreign": "Top-division clubs of these leagues take part in European competitions (the strongest 'clubs' of each).",
+  "foreign": [
+    {"country": "FRA", "name": "France", "names": ["Ligue 1", "French Ligue 1", "Ligue 1 McDonald's", "Ligue 1 Uber Eats"], "clubs": 8},
+    {"country": "ITA", "name": "Italy", "names": ["Serie A", "Italian Serie A", "Serie A TIM", "Serie A Enilive"], "clubs": 8},
+    {"country": "POR", "name": "Portugal", "names": ["Liga Portugal", "Liga NOS", "Portuguese Liga ZON SAGRES", "Liga Portugal Betclic"], "clubs": 6},
+    {"country": "NED", "name": "Netherlands", "names": ["Eredivisie", "Holland Eredivisie", "VriendenLoterij Eredivisie"], "clubs": 6},
+    {"country": "TUR", "name": "Turkey", "names": ["Süper Lig", "Super Lig", "Turkish Süper Lig", "Trendyol Süper Lig"], "clubs": 6},
+    {"country": "BEL", "name": "Belgium", "names": ["Pro League", "Belgian Pro League", "1A Pro League", "Jupiler Pro League"], "clubs": 6},
+    {"country": "SCO", "name": "Scotland", "names": ["Scottish Premiership", "Premiership", "cinch Premiership"], "clubs": 6},
+    {"country": "AUT", "name": "Austria", "names": ["Austrian Football Bundesliga", "Austrian Bundesliga", "Österreichische Fußball-Bundesliga", "Admiral Bundesliga"], "clubs": 6},
+    {"country": "SUI", "name": "Switzerland", "names": ["Swiss Super League", "Credit Suisse Super League", "Raiffeisen Super League"], "clubs": 6},
+    {"country": "GRE", "name": "Greece", "names": ["Super League Greece", "Greek Super League", "Stoiximan Super League"], "clubs": 6},
+    {"country": "DEN", "name": "Denmark", "names": ["Superliga", "Danish Superliga", "3F Superliga"], "clubs": 6},
+    {"country": "CZE", "name": "Czechia", "names": ["Czech First League", "Fortuna Liga", "Chance Liga"], "clubs": 6},
+    {"country": "UKR", "name": "Ukraine", "names": ["Ukrainian Premier League", "Ukraine Premier League"], "clubs": 5},
+    {"country": "CRO", "name": "Croatia", "names": ["HNL", "Croatian HNL", "SuperSport HNL"], "clubs": 5},
+    {"country": "SRB", "name": "Serbia", "names": ["Serbian SuperLiga", "Mozzart Bet Superliga"], "clubs": 5},
+    {"country": "NOR", "name": "Norway", "names": ["Eliteserien", "Norwegian Eliteserien"], "clubs": 5},
+    {"country": "SWE", "name": "Sweden", "names": ["Allsvenskan", "Swedish Allsvenskan"], "clubs": 5},
+    {"country": "POL", "name": "Poland", "names": ["Ekstraklasa", "PKO BP Ekstraklasa", "Polish Ekstraklasa"], "clubs": 5}
+  ],
+
+  "europe": [
+    {"id": "EC1", "name": "Champions League", "teams": 32},
+    {"id": "EC2", "name": "Europa League", "teams": 32},
+    {"id": "EC3", "name": "Conference League", "teams": 32}
+  ]
+}

@@ -13,6 +13,7 @@ const Gen = preload("res://src/sim/player_generator.gd")
 const Club = preload("res://src/sim/club.gd")
 const Season = preload("res://src/sim/season.gd")
 const WorldGen = preload("res://src/sim/world_gen.gd")
+const Transfers = preload("res://src/sim/transfers.gd")
 const QuickSim = preload("res://src/sim/quick_sim.gd")
 const Development = preload("res://src/sim/development.gd")
 const Economy = preload("res://src/sim/economy.gd")
@@ -65,6 +66,7 @@ func _init() -> void:
 	test_league_averages()
 	test_tactics_matter()
 	test_formation_balance()
+	test_long_run()
 	print("\nFinished in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
 	if failures == 0:
 		print("ALL CHECKS PASSED")
@@ -622,3 +624,64 @@ func test_quick_sim_matches_engine() -> void:
 	var qw := float(w) / n
 	print("  favourite wins: engine %.1f%%, fast model %.1f%%; goals per game engine %.2f, fast %.2f" % [eng["win"] * 100, qw * 100, eng["gf"] + eng["ga"], float(goals) / n])
 	check(absf(qw - eng["win"]) < 0.1, "the fast model's favourite win rate is within 10 points of the engine's")
+
+
+# ---------------------------------------------------------------- long run
+
+func _league_level(season, lid: String) -> float:
+	var cs: Array = season.clubs.filter(func(c): return c.league == lid)
+	return cs.reduce(func(a, c): return a + c.average_overall(), 0.0) / cs.size()
+
+
+## Several seasons back to back: squads, ratings and money must stay in sensible ranges.
+func test_long_run() -> void:
+	var seasons := 2 if quick else 4
+	print("\nA whole world over %d seasons" % seasons)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2024
+	var w := WorldGen.make_world(rng)
+	var s = Season.new()
+	s.new_game(w, w["clubs"].filter(func(c): return c.league == "ENG4")[0].id, rng, "Test")
+	var start := {}
+	for lid in ["ENG1", "ENG2", "ENG3", "ENG4"]:
+		start[lid] = _league_level(s, lid)
+	var players0 := 0
+	for c in s.clubs:
+		players0 += c.players.size()
+	for _i in seasons:
+		while not s.is_finished():
+			s.play_day(rng)
+		if s.sacked:
+			s.accept_job(s.job_offers[0]["club"], rng)
+		s.next_season(rng)
+	var sizes: Array = s.clubs.filter(func(c): return c.id != s.user_club_id).map(func(c): return c.players.size())
+	sizes.sort()
+	print("  AI squad sizes %d to %d, your squad %d" % [sizes[0], sizes[-1], s.user_club().players.size()])
+	check(sizes[0] >= Transfers.MIN_SQUAD and sizes[-1] <= Transfers.MAX_SQUAD, "AI squads stay between %d and %d players" % [Transfers.MIN_SQUAD, Transfers.MAX_SQUAD])
+	check(s.user_club().players.size() >= 16, "your squad never drops below 16 players")
+	var drift_ok := true
+	for lid in start:
+		var now: float = _league_level(s, lid)
+		print("  %s level %.1f -> %.1f" % [lid, start[lid], now])
+		if absf(now - start[lid]) > 2.0 * seasons + 1.0:
+			drift_ok = false
+	check(drift_ok, "league levels stay close to where they started")
+	var players1 := 0
+	var young := 0
+	var goalkeepers_ok := true
+	for c in s.clubs:
+		players1 += c.players.size()
+		young += c.players.filter(func(p): return p.age <= 21).size()
+		if c.players.filter(func(p): return p.position == "GK").size() < 1:
+			goalkeepers_ok = false
+	print("  players %d -> %d, %.0f%% aged 21 or under" % [players0, players1, young * 100.0 / players1])
+	check(absf(players1 - players0) < players0 * 0.1, "the number of players stays steady")
+	check(young * 1.0 / players1 > 0.03 and young * 1.0 / players1 < 0.35, "a healthy share of young players")
+	check(goalkeepers_ok, "every club has a goalkeeper")
+	var cash: Array = s.clubs.filter(func(c): return c.league == "ENG1").map(func(c): return c.cash)
+	cash.sort()
+	print("  first-division median cash %s" % Season._money(cash[cash.size() / 2]))
+	check(cash[cash.size() / 2] < 150000000, "top clubs do not pile up endless cash")
+	var copy = Season.new()
+	copy.load_dict(JSON.parse_string(JSON.stringify(s.to_dict())))
+	check(copy.to_dict().hash() == s.to_dict().hash() or JSON.stringify(copy.to_dict()) == JSON.stringify(s.to_dict()), "a long career saves and loads unchanged")

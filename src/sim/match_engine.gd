@@ -279,7 +279,10 @@ func _home_share() -> float:
 
 func _try_chance(a: TeamSide, b: TeamSide, share: float, start_min: int, out: Array) -> void:
 	var ratio: float = a.lines["att"] / maxf(1.0, b.lines["def"])
-	var edge: float = Tactics.matchup(a.tactics.style, b.tactics.style) * a.tactics.familiarity * a.fit
+	var mu: int = Tactics.matchup(a.tactics.style, b.tactics.style)
+	# Losing the style matchup hurts less than winning it helps, so a wrong guess is not a disaster.
+	var weight: float = 1.0 if mu >= 0 else float(_cfg.get("matchup_loser_share", 0.6))
+	var edge: float = mu * weight * a.tactics.familiarity * a.fit
 	var sa: Dictionary = Tactics.style_cfg(a.tactics.style)
 	var sb: Dictionary = Tactics.style_cfg(b.tactics.style)
 	var ma: Dictionary = Tactics.mentality_cfg(a.tactics.mentality)

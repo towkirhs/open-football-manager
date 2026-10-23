@@ -36,6 +36,9 @@ var loan_wage_share: float = 1.0
 var listed: bool = false
 ## Past seasons: {"year", "club", "apps", "goals", "assists", "avg"}
 var career: Array = []
+## Real-data players keep their official overall: the difference from the game's own
+## formula is stored here and added whenever overall is recalculated.
+var ovr_bonus: int = 0
 
 
 func load_dict(d: Dictionary) -> void:
@@ -66,6 +69,7 @@ func load_dict(d: Dictionary) -> void:
 	loan_wage_share = float(d.get("loan_wage_share", 1.0))
 	listed = bool(d.get("listed", false))
 	career = d.get("career", [])
+	ovr_bonus = int(d.get("ovr_bonus", 0))
 
 
 func to_dict() -> Dictionary:
@@ -92,6 +96,8 @@ func to_dict() -> Dictionary:
 		d["listed"] = true
 	if not career.is_empty():
 		d["career"] = career
+	if ovr_bonus != 0:
+		d["ovr_bonus"] = ovr_bonus
 	return d
 
 
@@ -125,5 +131,5 @@ func attr(key: String) -> float:
 
 ## Recomputes overall from attributes (after training or ageing).
 func refresh_overall(role_weights: Dictionary) -> void:
-	overall = clampi(roundi(role_rating(position, role_weights)), 1, 99)
+	overall = clampi(roundi(role_rating(position, role_weights)) + ovr_bonus, 1, 99)
 	potential = maxi(potential, overall)

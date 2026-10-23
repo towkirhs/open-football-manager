@@ -23,6 +23,7 @@ var _info: Label
 var _feed: RichTextLabel
 var _main_btn: Button
 var _skip_btn: Button
+var _sub_btn: Button
 var _formation: OptionButton
 var _style: OptionButton
 var _mentality: OptionButton
@@ -81,6 +82,10 @@ func _ready() -> void:
 	_skip_btn.custom_minimum_size = Vector2(140, 42)
 	_skip_btn.pressed.connect(_skip)
 	buttons.add_child(_skip_btn)
+	_sub_btn = W.button("Substitution")
+	_sub_btn.custom_minimum_size = Vector2(140, 42)
+	_sub_btn.pressed.connect(_open_sub_dialog)
+	buttons.add_child(_sub_btn)
 	buttons.add_child(W.label("Speed", 13, "muted"))
 	var speed := W.option(SPEEDS.keys(), 1)
 	speed.item_selected.connect(func(i): _timer.wait_time = SPEEDS[SPEEDS.keys()[i]])
@@ -174,6 +179,51 @@ func _set_tactics_enabled(on: bool) -> void:
 	_formation.disabled = not on
 	_style.disabled = not on
 	_mentality.disabled = not on
+	if _sub_btn != null:
+		_sub_btn.disabled = not on or _me().subs_left <= 0 or _me().lineup.bench.is_empty()
+		_sub_btn.text = "Substitution (%d left)" % _me().subs_left
+
+
+## Pick a player to take off and one from the bench to bring on (while paused or at half-time).
+func _open_sub_dialog() -> void:
+	var side = _me()
+	var m: Dictionary = W.modal(self, "Substitution", 520)
+	var body: VBoxContainer = m["body"]
+	var off: Array = []
+	for slot in side.lineup.slots:
+		var p = slot["player"]
+		if p != null and not side.sent_off.has(p.id):
+			off.append(p)
+	var on: Array = side.lineup.bench.duplicate()
+	var off_names: Array = []
+	for p in off:
+		var slot_i: int = side.lineup.slot_index_of(p.id)
+		off_names.append("%s  %s  (%d, energy %d%%)" % [side.lineup.slots[slot_i]["role"], p.name, p.overall, roundi(side.condition.get(p.id, p.fitness))])
+	var on_names: Array = on.map(func(p): return "%s  %s  (%d)" % [p.position, p.name, p.overall])
+	body.add_child(W.label("Take off", 14, "muted"))
+	# Suggest the most tired outfield player.
+	var tired := 0
+	var low := 999.0
+	for i in off.size():
+		var e: float = side.condition.get(off[i].id, off[i].fitness)
+		if off[i].position != "GK" and e < low:
+			low = e
+			tired = i
+	var off_opt := W.option(off_names, tired)
+	body.add_child(off_opt)
+	body.add_child(W.label("Bring on", 14, "muted"))
+	var on_opt := W.option(on_names, 0)
+	body.add_child(on_opt)
+	var ok := W.button("Make the change", true)
+	body.add_child(ok)
+	ok.pressed.connect(func():
+		var out_p = off[off_opt.selected]
+		var in_p = on[on_opt.selected]
+		if engine.substitute(user_side, out_p.id, in_p.id):
+			_feed.append_text("[color=%s]%d' You bring on %s for %s.[/color]\n" % [UiTheme.hex("accent"), engine.minute(), in_p.name, out_p.name])
+		m["root"].queue_free()
+		_set_tactics_enabled(true)
+	)
 
 
 func _matchup_text() -> String:
@@ -209,7 +259,11 @@ func _on_main_button() -> void:
 			_timer.stop()
 			_state = "paused"
 			_main_btn.text = "Resume"
+			_info.text = "Paused. You can change your formation, style or mentality, then resume."
+			_set_tactics_enabled(true)
 		"paused":
+			_apply_half_time_changes()
+			_info.text = _matchup_text()
 			_timer.start()
 			_state = "playing"
 			_main_btn.text = "Pause"
@@ -258,7 +312,7 @@ func _reshape(formation: String) -> void:
 
 func _skip() -> void:
 	_timer.stop()
-	if engine.is_half_time():
+	if engine.is_half_time() or _state == "paused":
 		_apply_half_time_changes()
 	while not engine.finished:
 		if engine.is_half_time():

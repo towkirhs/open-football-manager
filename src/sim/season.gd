@@ -87,6 +87,10 @@ var history: Array = []
 var honours: Array = []
 var awards: Array = []
 var next_offer_id: int = 1
+## Average player rating of each league (and each foreign country) when the career began.
+## New players (youth, unattached) are generated towards it, which keeps the world from
+## drifting: rich leagues cannot pull away for ever and poor ones do not sink.
+var level_anchor: Dictionary = {}
 
 var _club_by_id: Dictionary = {}
 var _player_by_id: Dictionary = {}
@@ -108,6 +112,7 @@ func new_game(world: Dictionary, user_id: String, rng: RandomNumberGenerator, na
 	user_club_id = user_id
 	manager_name = name
 	_index()
+	_compute_anchors()
 	manager_rep = clampf(user_club().reputation - 15.0, 10.0, 60.0)
 	managers = {}
 	for c in clubs:
@@ -126,6 +131,30 @@ func new_game(world: Dictionary, user_id: String, rng: RandomNumberGenerator, na
 	_build_season(rng, true)
 	var greet := "Welcome to %s." % user_club().name if manager_name == "You" else "Welcome to %s, %s." % [user_club().name, manager_name]
 	add_news(greet + " Pick a sponsor on the Home tab, and see the owner's targets in the Club tab.")
+
+
+func _anchor_key(c) -> String:
+	return "L:" + c.league if c.league != "" else "F:" + c.country
+
+
+func _compute_anchors() -> void:
+	var sums := {}
+	for c in clubs:
+		var k := _anchor_key(c)
+		if not sums.has(k):
+			sums[k] = [0.0, 0]
+		sums[k][0] += c.average_overall()
+		sums[k][1] += 1
+	level_anchor = {}
+	for k in sums:
+		level_anchor[k] = snappedf(sums[k][0] / sums[k][1], 0.1)
+
+
+## The level new players for this club are generated at: between the club's own level
+## and its league's starting level.
+func generation_level(c) -> float:
+	var own: float = c.average_overall()
+	return lerpf(own, float(level_anchor.get(_anchor_key(c), own)), 0.6)
 
 
 func _new_manager(rng: RandomNumberGenerator):
@@ -1262,6 +1291,24 @@ func _close_season(rng: RandomNumberGenerator) -> void:
 					free_agents.append(p)
 
 
+## AI clubs with money to spare invest it in facilities (which also cost upkeep).
+func _ai_invest(c) -> void:
+	var income: int = yearly_income(c)
+	for _i in 2:
+		if c.cash < income:
+			return
+		var lowest := ""
+		for k in Club.FACILITIES:
+			if int(c.facilities[k]) < 5 and (lowest == "" or int(c.facilities[k]) < int(c.facilities[lowest])):
+				lowest = k
+		if lowest == "":
+			return
+		var cost: int = Economy.upgrade_cost(c, lowest)
+		if cost < 0 or c.cash - cost < income / 2:
+			return
+		Economy.upgrade(c, lowest)
+
+
 func _season_awards(l, summary: Dictionary) -> void:
 	var race := award_race(l.id, 1)
 	for key in ["best", "young", "scorer"]:
@@ -1337,7 +1384,7 @@ func next_season(rng: RandomNumberGenerator) -> void:
 	# Youth intake. AI clubs promote their best prospects when the squad is short.
 	_xi_cache = {}
 	for c in clubs:
-		var strength: float = c.average_overall()
+		var strength: float = generation_level(c)
 		var intake: Array = Development.youth_intake(c, strength, year, rng)
 		for p in intake:
 			c.youth.append(p)
@@ -1346,24 +1393,21 @@ func next_season(rng: RandomNumberGenerator) -> void:
 		if c.id == user_club_id:
 			add_news("%d new prospects join your youth academy." % intake.size())
 		else:
-			c.youth.sort_custom(func(a, b): return a.potential > b.potential)
-			while c.players.size() < 23 and not c.youth.is_empty():
-				c.players.append(c.youth.pop_front())
+			Transfers.fill_squad(self, c, 23, rng)
+			_ai_invest(c)
 		c.youth.sort_custom(func(a, b): return a.potential > b.potential)
 		while c.youth.size() > MAX_ACADEMY:
 			var gone = c.youth.pop_back()
 			_player_by_id.erase(gone.id)
 			_player_club.erase(gone.id)
-		# Clubs that are short of players top up from free agents.
-		if c.id != user_club_id:
-			while c.players.size() < Transfers.MIN_SQUAD and not free_agents.is_empty():
-				var fa = free_agents.pop_front()
-				fa.wage = Transfers.wage_demand(self, fa, c)
-				fa.contract_end = year + 1
-				c.players.append(fa)
-				_player_club[fa.id] = c.id
 		for p in c.players:
 			p.refresh_overall(weights)
+	# The board never lets your squad fall apart: below 16 players it signs free agents.
+	var uc = user_club()
+	if uc.players.size() < 16 or uc.players.filter(func(p): return p.position == "GK").size() < 2:
+		var added: Array = Transfers.fill_squad(self, uc, 16, rng)
+		if not added.is_empty():
+			add_news("Your squad was too small, so the board signed %d player%s: %s." % [added.size(), "" if added.size() == 1 else "s", ", ".join(added.map(func(p): return p.name))])
 	_build_season(rng, false)
 	add_news("The %d/%02d season begins. Pick a sponsor and check the owner's targets in the Club tab." % [year, (year + 1) % 100])
 
@@ -1416,7 +1460,7 @@ func to_dict() -> Dictionary:
 		"stats": stats, "style_history": style_history, "user_results": user_results, "news": news,
 		"last_standings": last_standings, "last_cup_winners": last_cup_winners, "pending_moves": pending_moves,
 		"season_summary": season_summary, "history": history, "honours": honours, "awards": awards,
-		"next_offer_id": next_offer_id,
+		"next_offer_id": next_offer_id, "level_anchor": level_anchor,
 	}
 
 
@@ -1504,6 +1548,9 @@ func load_dict(d: Dictionary) -> void:
 	awards = d.get("awards", [])
 	next_offer_id = int(d.get("next_offer_id", 1))
 	_index()
+	level_anchor = d.get("level_anchor", {})
+	if level_anchor.is_empty():
+		_compute_anchors()
 
 
 func save(path: String = SAVE_PATH) -> Error:

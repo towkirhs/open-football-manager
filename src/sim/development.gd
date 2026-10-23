@@ -69,7 +69,7 @@ static func train_club(club, rng: RandomNumberGenerator) -> Array:
 				weight = weight * 0.6 + float(focus[k]) * 0.4 * bonus
 			if weight <= 0.0:
 				continue
-			var delta: float = base * mult * weight * 1.4 * rng.randf_range(0.6, 1.4)
+			var delta: float = base * mult * weight * 1.15 * rng.randf_range(0.6, 1.4)
 			var acc: float = float(p.progress.get(k, 0.0)) + delta
 			while acc >= 1.0:
 				p.attrs[k] = mini(99, int(p.attrs[k]) + 1)
@@ -120,11 +120,15 @@ static func youth_intake(club, strength: float, year: int, rng: RandomNumberGene
 	var out: Array = []
 	for i in count:
 		var pos: String = YOUTH_POSITIONS[rng.randi_range(0, YOUTH_POSITIONS.size() - 1)]
-		var lvl: float = strength - 22.0 + level * 1.5 + coach / 25.0 + rng.randfn(0.0, 4.0)
+		var lvl: float = strength - 34.0 + level * 1.5 + coach / 25.0 + rng.randfn(0.0, 4.0)
 		var nation: String = club.country if rng.randf() < 0.8 else ""
 		var p = Gen.make_player(rng, "%s-y%d%02d" % [club.id, year, i + 1], pos, lvl, {}, nation, year, rng.randi_range(16, 17))
 		# Prospects come with a high ceiling; a top academy finds the best ones.
-		p.potential = clampi(p.overall + roundi(rng.randf_range(10.0, 22.0) + level * 2.0 + coach / 20.0), p.overall, 95)
+		# Most prospects top out around the club's level; a top academy finds the odd star.
+		var ceiling: float = rng.randf_range(6.0, 18.0) + level * 1.2 + coach / 30.0
+		if rng.randf() < 0.05 + level * 0.01:
+			ceiling += rng.randf_range(4.0, 10.0)
+		p.potential = clampi(p.overall + roundi(ceiling), p.overall, 94)
 		p.value = Gen.value_for(p.overall, p.age, p.potential)
 		p.wage = int(Gen.wage_for(p.value) * 0.5)
 		p.contract_end = year + 3

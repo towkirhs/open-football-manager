@@ -132,19 +132,30 @@ static func _make_club(rng: RandomNumberGenerator, id: String, country: String, 
 	var identities := [{}, {"pace": 3}, {"passing": 3, "dribbling": 2}, {"physical": 3}, {"defending": 3}]
 	c.players = Gen.make_squad(rng, id, level, identities[rng.randi_range(0, identities.size() - 1)], country, year)
 
-	# Stadium, crowd and facilities follow the club's standing.
+	fill_economy(c, tier, strength, rng, year, true)
+	return c
+
+
+## Stadium, crowd, facilities, staff, wages and cash for a club, from its standing.
+## Used for the generated world and to complete real-data worlds, which lack these.
+## overwrite = false keeps any values a world file already has.
+static func fill_economy(c, tier: int, strength: float, rng: RandomNumberGenerator, year: int, overwrite: bool) -> void:
 	var rank: float = clampf((strength - 50.0) / 35.0, 0.0, 1.0)
-	c.stadium = int(round(lerpf(4000.0, 75000.0, pow(rank, 1.6)) * rng.randf_range(0.8, 1.2) / 500.0) * 500)
-	c.fans = int(c.stadium * rng.randf_range(0.6, 0.85))
-	c.ticket_price = [0, 45, 25, 18, 12][clampi(tier, 1, 4)]
-	var fac_level: int = clampi(roundi(1.0 + rank * 4.0 + rng.randf_range(-0.6, 0.6)), 1, 5)
-	for k in Club.FACILITIES:
-		c.facilities[k] = clampi(fac_level + rng.randi_range(-1, 1), 1, 5)
-	c.facilities["stadium"] = clampi(roundi(1.0 + rank * 4.0), 1, 5)
-	for role in STAFF_ROLES:
-		c.staff[role] = make_staff(rng, clampi(roundi(strength - 10.0 + rng.randfn(0.0, 6.0)), 20, 95), year)
+	if overwrite or c.stadium <= 0:
+		c.stadium = int(round(lerpf(4000.0, 75000.0, pow(rank, 1.6)) * rng.randf_range(0.8, 1.2) / 500.0) * 500)
+		c.fans = int(c.stadium * rng.randf_range(0.6, 0.85))
+	if overwrite or c.ticket_price <= 0:
+		c.ticket_price = [0, 45, 25, 18, 12][clampi(tier, 1, 4)]
+	if overwrite or c.facilities.values().all(func(v): return int(v) <= 1):
+		var fac_level: int = clampi(roundi(1.0 + rank * 4.0 + rng.randf_range(-0.6, 0.6)), 1, 5)
+		for k in Club.FACILITIES:
+			c.facilities[k] = clampi(fac_level + rng.randi_range(-1, 1), 1, 5)
+		c.facilities["stadium"] = clampi(roundi(1.0 + rank * 4.0), 1, 5)
+	if overwrite or c.staff.is_empty():
+		for role in STAFF_ROLES:
+			c.staff[role] = make_staff(rng, clampi(roundi(strength - 10.0 + rng.randfn(0.0, 6.0)), 20, 95), year)
 	# Fit the wage bill to what the club can earn, so every club starts out viable.
-	var home_games: int = 23 if (tier >= 2 and country == "ENG") else 19
+	var home_games: int = 23 if (tier >= 2 and c.country == "ENG") else 19
 	var income: int = Economy.estimate_income(c, tier, home_games)
 	var e: Dictionary = Balance.data()["economy"]
 	var upkeep := 0
@@ -160,9 +171,9 @@ static func _make_club(rng: RandomNumberGenerator, id: String, country: String, 
 	var factor: float = clampf(target / maxf(1.0, player_wages * 52.0), 0.5, 1.6)
 	for p in c.players:
 		p.wage = maxi(int(e.get("min_wage", 400)), int(round(p.wage * factor / 10.0) * 10))
-	# Starting money: about a third of a year's wages, more for bigger clubs.
-	c.cash = int(round(c.wage_bill() * 52 * rng.randf_range(0.3, 0.5) / 10000.0) * 10000)
-	return c
+	if overwrite or c.cash == 1000000:
+		# Starting money: about a third of a year's wages, more for bigger clubs.
+		c.cash = int(round(c.wage_bill() * 52 * rng.randf_range(0.3, 0.5) / 10000.0) * 10000)
 
 
 static func make_staff(rng: RandomNumberGenerator, skill: int, year: int) -> Dictionary:

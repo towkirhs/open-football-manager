@@ -210,7 +210,7 @@ static func _ai_try_signing(season, c, rng: RandomNumberGenerator, weights: Dict
 			weakest_role = slot["role"]
 	if weakest_role == "":
 		return
-	var budget: int = maxi(0, int(c.cash * 0.45))
+	var budget: int = maxi(0, int(c.cash * 0.35))
 	var best = null
 	var best_seller = null
 	var best_score := weakest + 2.0
@@ -227,16 +227,18 @@ static func _ai_try_signing(season, c, rng: RandomNumberGenerator, weights: Dict
 			p = seller.players[rng.randi_range(0, seller.players.size() - 1)]
 		if p.loan_from != "" or p.injury_weeks > 3 or p.age >= 33:
 			continue
+		# AI clubs shop at their own level; this keeps the leagues from drifting apart.
+		if p.overall > c.reputation + 5:
+			continue
 		var score: float = Lineup.role_score(p, weakest_role)
 		if score <= best_score or not interested(p, c):
 			continue
 		var fee: int = 0 if seller == null else asking_price(season, seller, p)
 		if fee > budget:
 			continue
-		if seller != null and seller.id == season.user_club_id:
-			# Bids for the human's players go to their inbox instead.
-			if season.is_key_player(seller, p) and rng.randf() < 0.7:
-				continue
+		if seller != null and season.is_key_player(seller, p) and rng.randf() < 0.7:
+			# Clubs rarely sell their starters (bids for the human's go to the inbox).
+			continue
 		best = p
 		best_seller = seller
 		best_score = score
@@ -271,13 +273,71 @@ static func ai_contracts(season, c, rng: RandomNumberGenerator) -> void:
 	for p in c.players.duplicate():
 		if p.loan_from != "" or p.contract_end > season.year:
 			continue
-		var wanted: bool = p.overall >= avg - 6.0 and p.age < 33
+		var wanted: bool = p.overall >= avg - 8.0 and p.age < 34
 		var new_wage: int = wage_demand(season, p, c)
-		var affordable: bool = (c.wage_bill() - p.wage + new_wage) * 52 <= season.yearly_income(c) * 0.75
-		if wanted and affordable and rng.randf() < 0.85:
+		var affordable: bool = (c.wage_bill() - p.wage + new_wage) * 52 <= season.yearly_income(c) * 0.85
+		if wanted and affordable and rng.randf() < 0.9:
 			p.wage = new_wage
 			p.contract_end = season.year + rng.randi_range(1, 3)
 		else:
 			c.players.erase(p)
 			season.free_agents.append(p)
 			season.on_player_moved(p, c, null, 0, false)
+
+
+## Summer top-up for a club below its target squad size: the best affordable free agents
+## who fit the club's level first, then academy prospects who are good enough.
+static func fill_squad(season, c, target: int, rng: RandomNumberGenerator) -> Array:
+	var signed: Array = []
+	var avg: float = c.average_overall()
+	var pool: Array = season.free_agents.filter(func(p): return p.age < 34 and p.overall >= avg - 10.0 and p.overall <= avg + 6.0)
+	pool.sort_custom(func(a, b): return a.overall > b.overall)
+	for p in pool:
+		if c.players.size() >= target:
+			break
+		var wage: int = wage_demand(season, p, c)
+		if (c.wage_bill() + wage) * 52 > season.yearly_income(c) * 0.9 and c.players.size() >= MIN_SQUAD:
+			continue
+		complete(season, p, null, c, 0, wage, rng.randi_range(1, 3))
+		signed.append(p)
+	# Prospects already close to first-team level are promoted.
+	for y in c.youth.duplicate():
+		if y.overall >= avg - 8.0 and c.players.size() < target:
+			c.youth.erase(y)
+			c.players.append(y)
+	# Still short: unattached players from outside the modelled leagues, a little below
+	# the club's level, in the positions where the squad is thinnest.
+	var n := 0
+	while c.players.size() < target or c.players.filter(func(q): return q.position == "GK").size() < 2:
+		n += 1
+		var p = new_unattached(season, c, "%s-n%d%02d" % [c.id, season.year, n], season.generation_level(c) - rng.randf_range(2.0, 8.0), rng)
+		complete(season, p, null, c, 0, wage_demand(season, p, c), rng.randi_range(1, 3))
+		signed.append(p)
+	return signed
+
+
+## A generated player with roughly the given overall, for the position the club needs most.
+static func new_unattached(season, c, id: String, target_overall: float, rng: RandomNumberGenerator):
+	var need := ""
+	var gap := -99.0
+	if c.players.filter(func(q): return q.position == "GK").size() < 2:
+		need = "GK"
+		gap = 99.0
+	for pos in Gen.SQUAD_TEMPLATE:
+		var have: int = c.players.filter(func(q): return q.position == pos).size()
+		var g: float = Gen.SQUAD_TEMPLATE[pos] - have + rng.randf() * 0.5
+		if g > gap:
+			gap = g
+			need = pos
+	var age: int = rng.randi_range(20, 30)
+	var p = Gen.make_player(rng, id, need, target_overall - 14.0, {}, c.country if rng.randf() < 0.5 else "", season.year, age)
+	# Shift the attributes so the overall lands on the target.
+	var weights: Dictionary = Balance.data()["role_weights"]
+	var shift: int = roundi(target_overall - p.overall)
+	for k in p.attrs:
+		p.attrs[k] = clampi(int(p.attrs[k]) + shift, 10, 95)
+	p.refresh_overall(weights)
+	p.potential = Gen.potential_for(p.overall, p.age, rng)
+	p.value = Gen.value_for(p.overall, p.age, p.potential)
+	season.free_agents.append(p)
+	return p
